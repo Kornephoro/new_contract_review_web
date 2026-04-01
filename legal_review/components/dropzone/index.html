@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 0; font-family: "Outfit", "Noto Sans SC", sans-serif; overflow: hidden; }
+
+        /* ── 大型拖放区 ── */
+        .dropzone-box {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: center;
+            color: #8a857f;
+            border: 1px solid #d8cfc0;
+            border-radius: 20px;
+            background: linear-gradient(180deg, rgba(255, 253, 249, 0.94) 0%, rgba(246, 240, 230, 0.98) 100%);
+            margin-top: 4px;
+            width: 100%;
+            box-shadow: 0 16px 30px rgba(26, 31, 46, 0.05);
+            transition: all 0.2s ease-in-out;
+            cursor: pointer;
+            padding: 18px 20px;
+            position: relative;
+            overflow: hidden;
+        }
+        .dropzone-box::before {
+            content: "";
+            position: absolute;
+            inset: 0 auto 0 0;
+            width: 4px;
+            background: linear-gradient(180deg, #b8945f 0%, rgba(44, 62, 107, 0.42) 100%);
+        }
+        .dropzone-box.drag-active {
+            border-color: #b8945f !important;
+            background: linear-gradient(180deg, rgba(255, 251, 244, 0.99) 0%, rgba(241, 232, 214, 0.99) 100%) !important;
+            transform: translateY(-1px);
+            box-shadow: 0 18px 34px rgba(26, 31, 46, 0.08);
+        }
+        .dropzone-box.drag-active * { pointer-events: none; }
+        #icon { font-size: 0.78rem; margin-bottom: 8px; color: #b8945f; opacity: 0.9; letter-spacing: 0.12em; text-transform: uppercase; }
+        #title { font-size: 1rem; font-weight: 600; color: #1a1f2e; }
+        #subtitle { font-size: 0.82rem; margin-top: 8px; color: #766f65; line-height: 1.65; max-width: 18rem; }
+
+        /* ── Mini 拖放条 ── */
+        .mini-drop {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 9px 12px;
+            border: 1px solid #d9cfbf;
+            border-radius: 14px;
+            background: rgba(255, 252, 247, 0.92);
+            color: #8a857f;
+            font-size: 0.82rem;
+            cursor: pointer;
+            box-shadow: 0 10px 24px rgba(26, 31, 46, 0.04);
+            transition: all 0.18s ease;
+            width: 100%;
+            margin-top: 2px;
+        }
+        .mini-drop.drag-active {
+            border-color: #b8945f !important;
+            background: rgba(184, 148, 95, 0.08) !important;
+            color: #b8945f;
+        }
+        .mini-drop:hover {
+            border-color: #b8945f;
+        }
+        .mini-drop .mini-icon { font-size: 0.72rem; flex-shrink: 0; color: #b8945f; opacity: 0.9; letter-spacing: 0.12em; text-transform: uppercase; }
+        .mini-drop .mini-text { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    </style>
+    <script>
+        let isRendered = false;
+        let isMini = false;
+
+        function sendMessageToStreamlit(type, data) {
+            window.parent.postMessage({ isStreamlitMessage: true, type: type, ...data }, "*");
+        }
+
+        function handleDrop(e, el) {
+            e.preventDefault();
+            el.classList.remove("drag-active");
+            let idx = e.dataTransfer.getData("text/plain");
+            if (idx !== undefined && idx !== "") {
+                sendMessageToStreamlit("streamlit:setComponentValue", { value: { idx: idx, ts: Date.now() } });
+            }
+        }
+
+        function bindDragEvents(el) {
+            el.ondragover = e => {
+                e.preventDefault();
+                el.classList.add("drag-active");
+                e.dataTransfer.dropEffect = "copy";
+            };
+            el.ondragleave = e => {
+                el.classList.remove("drag-active");
+            };
+            el.ondrop = e => handleDrop(e, el);
+        }
+
+        window.addEventListener("message", function(event) {
+            if (event.data.type === "streamlit:render") {
+                const args = event.data.args;
+                const minH = args.min_height || 200;
+                isMini = minH <= 60;
+
+                if (isMini) {
+                    // 渲染 mini 条
+                    document.getElementById("large-zone").style.display = "none";
+                    const mini = document.getElementById("mini-zone");
+                    mini.style.display = "flex";
+                    if (args.title) {
+                        document.getElementById("mini-text").innerText = args.title;
+                    }
+                    if (!isRendered) {
+                        bindDragEvents(mini);
+                    }
+                } else {
+                    // 渲染大型拖放区
+                    document.getElementById("mini-zone").style.display = "none";
+                    const box = document.getElementById("dropzone");
+                    box.style.display = "flex";
+                    box.style.minHeight = minH + "px";
+                    if (args.title) document.getElementById("title").innerText = args.title;
+                    if (args.subtitle) {
+                        document.getElementById("subtitle").innerText = args.subtitle;
+                        document.getElementById("subtitle").style.display = "";
+                    } else {
+                        document.getElementById("subtitle").style.display = "none";
+                    }
+                    if (!isRendered) {
+                        bindDragEvents(box);
+                    }
+                }
+
+                if (!isRendered) {
+                    isRendered = true;
+                    setTimeout(() => {
+                        sendMessageToStreamlit("streamlit:setFrameHeight", { height: document.body.scrollHeight + 8 });
+                    }, 60);
+                }
+            }
+        });
+
+        window.addEventListener("load", function() {
+            sendMessageToStreamlit("streamlit:componentReady", { apiVersion: 1 });
+        });
+    </script>
+</head>
+<body>
+    <!-- 大型拖放区 -->
+    <div id="large-zone">
+        <div id="dropzone" class="dropzone-box" style="display:none;">
+            <div id="icon">REVIEW DESK</div>
+            <div id="title">将左侧卡片送入当前处理台</div>
+            <div id="subtitle">这里用于锁定当前风险，并进入右侧的解释、决策与追问流程。</div>
+        </div>
+    </div>
+
+    <!-- Mini 拖放条 -->
+    <div id="mini-zone" class="mini-drop" style="display:none;">
+        <span class="mini-icon">SWAP</span>
+        <span id="mini-text" class="mini-text">拖入新卡片可替换当前处理对象</span>
+    </div>
+</body>
+</html>
