@@ -7,52 +7,45 @@ import html
 from legal_review.review_postprocess import get_risk_suggestion_state
 
 
-def build_risk_deck_html(risks_with_idx: list, _theme_key: str, applied_risks: set = None) -> str:
+def build_risk_deck_html(
+    risks_with_idx: list,
+    _theme_key: str,
+    applied_risks: set = None,
+    review_later_risks: set = None,
+) -> str:
     """
     左：风险卡片（可拖拽、可点击选为追问）。
     「墨律」editorial design — premium warm aesthetic with serif titles,
     colored dot indicators, and refined dimension badges.
     """
     # -- 墨律 Design Tokens --------------------------------------------------
-    is_dark = _theme_key == "dark"
     FONT_BODY = '"Outfit","Noto Sans SC",sans-serif'
     FONT_TITLE = '"Cormorant Garamond","Noto Serif SC",serif'
 
-    # 维度徽章配色 (fg, bg at ~0.08 opacity tint)
-    if is_dark:
-        dim_colors = {
-            "法律合规": ("#8ab0d8", "rgba(90,130,190,0.12)"),
-            "风险防控": ("#e89490", "rgba(180,70,65,0.12)"),
-            "条款完善": ("#e0c470", "rgba(180,140,50,0.12)"),
-            "利益保护": ("#7dc09a", "rgba(70,150,90,0.12)"),
-        }
-        # (dot_color, card_bg, card_border, left_color, title_color)
-        level_styles = {
-            "高风险": ("#e89490", "#2a2025", "#5a3535", "#e89490", "#e89490"),
-            "中风险": ("#e0c470", "#28251a", "#4a4025", "#e0c470", "#e0c470"),
-            "低风险": ("#8ab0d8", "#1e2530", "#35455a", "#8ab0d8", "#8ab0d8"),
-        }
-        BODY_FG = "#d0ccc6"
-        MUTED_FG = "#8a857f"
-    else:
-        dim_colors = {
-            "法律合规": ("#2c4a6e", "rgba(44,74,110,0.08)"),
-            "风险防控": ("#8b3535", "rgba(139,53,53,0.08)"),
-            "条款完善": ("#8b6a25", "rgba(139,106,37,0.08)"),
-            "利益保护": ("#2e6b45", "rgba(46,107,69,0.08)"),
-        }
-        level_styles = {
-            "高风险": ("#c4655e", "#fffaf7", "#ead4ce", "#bf5d54", "#7a2d29"),
-            "中风险": ("#d4a84a", "#fffaf3", "#ead9b8", "#b88731", "#71551d"),
-            "低风险": ("#7a9ec4", "#f8fbff", "#d7e2ee", "#6282a7", "#35567d"),
-        }
-        BODY_FG = "#2d2d2d"
-        MUTED_FG = "#7a7672"
+    CARD_BG = "var(--deck-card-bg, #fffaf7)"
+    CARD_BORDER = "var(--deck-card-border, #eadfd2)"
+    BODY_FG = "var(--deck-body-fg, #1f2633)"
+    MUTED_FG = "var(--deck-muted-fg, #6f7682)"
+    INSET_BG = "var(--deck-card-inset, rgba(0, 0, 0, 0.025))"
+    NEUTRAL_BADGE_BG = "var(--deck-neutral-badge-bg, rgba(255, 255, 255, 0.78))"
+    NEUTRAL_BADGE_FG = "var(--deck-neutral-badge-fg, #4f6278)"
 
-    # Accent gold for applied-state buttons
-    ACCENT_GOLD = "#d4b070" if is_dark else "#b8945f"
+    dim_colors = {
+        "法律合规": ("#6282a7", "rgba(98,130,167,0.10)"),
+        "风险防控": ("#cf635c", "rgba(207,99,92,0.10)"),
+        "条款完善": ("#b88731", "rgba(184,135,49,0.10)"),
+        "利益保护": ("#5ba06e", "rgba(91,160,110,0.10)"),
+    }
+    level_styles = {
+        "高风险": ("#cf635c", CARD_BG, CARD_BORDER, "#cf635c", "#cf635c"),
+        "中风险": ("#b88731", CARD_BG, CARD_BORDER, "#b88731", "#b88731"),
+        "低风险": ("#6282a7", CARD_BG, CARD_BORDER, "#6282a7", "#6282a7"),
+    }
+
+    ACCENT_GOLD = "#b8945f"
 
     applied_risks = applied_risks or set()
+    review_later_risks = review_later_risks or set()
     cards = []
 
     # risks_with_idx -> list of (actual_global_idx, risk_dict)
@@ -76,6 +69,7 @@ def build_risk_deck_html(risks_with_idx: list, _theme_key: str, applied_risks: s
 
         has_sugg = bool(suggestion_state["has_display"])
         is_applied = (actual_idx in applied_risks)
+        is_review_later = (actual_idx in review_later_risks)
 
         loc_js = (
             f"try{{var el=window.parent.document.getElementById('risk-anchor-{actual_idx}');"
@@ -102,7 +96,7 @@ def build_risk_deck_html(risks_with_idx: list, _theme_key: str, applied_risks: s
                 f'<span style="font-size:0.85rem;line-height:1;">&#9998;</span>'
                 f'<span>修改建议</span></summary>'
                 f'<div style="margin-top:8px;padding:10px 14px;border-radius:6px;'
-                f'background:{"rgba(255,255,255,0.05)" if is_dark else "rgba(255,255,255,0.7)"};'
+                f'background:{INSET_BG};'
                 f'border-left:3px solid {ACCENT_GOLD};'
                 f'font-family:{FONT_BODY};font-size:0.82rem;'
                 f'line-height:1.6;color:{BODY_FG};'
@@ -112,7 +106,7 @@ def build_risk_deck_html(risks_with_idx: list, _theme_key: str, applied_risks: s
         if suggestion_warning:
             suggestion_html += (
                 f'<div style="margin-top:8px;padding:6px 10px;border-radius:6px;'
-                f'background:{"rgba(255,255,255,0.04)" if is_dark else "rgba(0,0,0,0.025)"};'
+                f'background:{INSET_BG};'
                 f'font-family:{FONT_BODY};font-size:0.76rem;color:{MUTED_FG};line-height:1.5;">'
                 f'{html.escape(suggestion_warning)}</div>'
             )
@@ -123,7 +117,7 @@ def build_risk_deck_html(risks_with_idx: list, _theme_key: str, applied_risks: s
             legal_esc = html.escape(legal_basis)
             legal_html = (
                 f'<div style="margin-top:8px;padding:5px 10px;border-radius:5px;'
-                f'background:{"rgba(255,255,255,0.04)" if is_dark else "rgba(0,0,0,0.025)"};'
+                f'background:{INSET_BG};'
                 f'font-family:{FONT_BODY};font-size:0.76rem;color:{MUTED_FG};'
                 f'line-height:1.5;letter-spacing:0.01em;'
                 f'display:flex;align-items:flex-start;gap:5px;">'
@@ -132,12 +126,26 @@ def build_risk_deck_html(risks_with_idx: list, _theme_key: str, applied_risks: s
             )
 
         # -- Card shell -------------------------------------------------------
-        state_label = "已采纳" if is_applied else ("待处理" if suggestion_actionable else ("说明性意见" if has_sugg else "待查看"))
+        state_label = (
+            "已采纳"
+            if is_applied
+            else (
+                "待复核"
+                if is_review_later
+                else ("待处理" if suggestion_actionable else ("说明性意见" if has_sugg else "待查看"))
+            )
+        )
         state_bg = (
             "rgba(212,176,112,0.14)" if is_applied else
-            ("rgba(84,110,122,0.10)" if not suggestion_actionable else ("rgba(255,255,255,0.08)" if is_dark else "rgba(255,255,255,0.78)"))
+            (
+                "rgba(92,110,128,0.18)" if is_review_later else
+                (NEUTRAL_BADGE_BG if not suggestion_actionable else NEUTRAL_BADGE_BG)
+            )
         )
-        state_fg = ACCENT_GOLD if is_applied else (MUTED_FG if not suggestion_actionable else left_color)
+        state_fg = (
+            ACCENT_GOLD if is_applied else
+            (NEUTRAL_BADGE_FG if is_review_later else (MUTED_FG if not suggestion_actionable else left_color))
+        )
         cards.append(
             f'<div class="risk-card" draggable="true" data-risk-index="{actual_idx}" '
             f'ondragstart="event.dataTransfer.setData(\'text/plain\',\'{actual_idx}\');" '
@@ -197,7 +205,7 @@ def build_risk_deck_html(risks_with_idx: list, _theme_key: str, applied_risks: s
                 f'<button type="button" disabled '
                 f'style="font-family:{FONT_BODY};font-size:0.8rem;'
                 f'padding:5px 14px;border-radius:6px;'
-                f'border:1px solid {"#4a4640" if is_dark else "#c5c0b8"};background:transparent;'
+                f'border:1px solid {CARD_BORDER};background:transparent;'
                 f'color:{MUTED_FG};cursor:not-allowed;font-weight:500;letter-spacing:0.02em;">'
                 f'\u4e0d\u53ef\u76f4\u63a5\u5e94\u7528</button>'
             )
@@ -214,7 +222,7 @@ def build_risk_deck_html(risks_with_idx: list, _theme_key: str, applied_risks: s
             f'<button type="button" onclick="{loc_js}" '
             f'style="font-family:{FONT_BODY};font-size:0.8rem;'
             f'padding:5px 14px;border-radius:6px;'
-            f'border:1px solid {"#4a4640" if is_dark else "#c5c0b8"};background:transparent;'
+            f'border:1px solid {CARD_BORDER};background:transparent;'
             f'color:{MUTED_FG};cursor:pointer;font-weight:500;'
             f'letter-spacing:0.02em;transition:all 0.15s ease;">'
             f'\u5b9a\u4f4d\u539f\u6587</button>'

@@ -69,10 +69,89 @@
         }
         .mini-drop .mini-icon { font-size: 0.72rem; flex-shrink: 0; color: #b8945f; opacity: 0.9; letter-spacing: 0.12em; text-transform: uppercase; }
         .mini-drop .mini-text { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        body.dark .dropzone-box {
+            color: #aeb6c3;
+            border-color: #40475b;
+            background: linear-gradient(180deg, rgba(25, 31, 44, 0.96) 0%, rgba(19, 24, 34, 0.98) 100%);
+            box-shadow: 0 16px 30px rgba(0, 0, 0, 0.20);
+        }
+        body.dark .dropzone-box.drag-active {
+            border-color: #d4b070 !important;
+            background: linear-gradient(180deg, rgba(33, 40, 56, 0.98) 0%, rgba(24, 30, 42, 0.99) 100%) !important;
+        }
+        body.dark #title { color: #e8e4df; }
+        body.dark #subtitle { color: #a7b0bc; }
+        body.dark .mini-drop {
+            border-color: #40475b;
+            background: rgba(24, 30, 42, 0.96);
+            color: #b7bfca;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+        }
+        body.dark .mini-drop.drag-active {
+            background: rgba(212, 176, 112, 0.10) !important;
+            color: #d4b070;
+        }
     </style>
     <script>
         let isRendered = false;
         let isMini = false;
+
+        function parseColor(value) {
+            const v = (value || "").trim();
+            if (!v) return null;
+            if (v.startsWith("#")) {
+                const hex = v.slice(1);
+                const full = hex.length === 3 ? hex.split("").map(ch => ch + ch).join("") : hex;
+                if (full.length !== 6) return null;
+                return {
+                    r: parseInt(full.slice(0, 2), 16),
+                    g: parseInt(full.slice(2, 4), 16),
+                    b: parseInt(full.slice(4, 6), 16),
+                };
+            }
+            const m = v.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+            if (!m) return null;
+            return { r: parseInt(m[1], 10), g: parseInt(m[2], 10), b: parseInt(m[3], 10) };
+        }
+
+        function detectDarkTheme() {
+            try {
+                const root = window.parent.document.documentElement;
+                const themeAttr = root.getAttribute("data-ml-theme");
+                if (themeAttr === "dark") return true;
+                if (themeAttr === "light") return false;
+                const main = window.parent.document.querySelector('[data-testid="stAppViewContainer"] > .main');
+                const app = window.parent.document.querySelector(".stApp");
+                const styles = window.parent.getComputedStyle(main || app || root);
+                const bg = parseColor(styles.backgroundColor);
+                if (!bg) return false;
+                const luminance = (0.2126 * bg.r + 0.7152 * bg.g + 0.0722 * bg.b) / 255;
+                return luminance < 0.5;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function applyTheme() {
+            document.body.classList.toggle("dark", detectDarkTheme());
+        }
+
+        function watchTheme() {
+            try {
+                const root = window.parent.document.documentElement;
+                new MutationObserver(applyTheme).observe(root, {
+                    attributes: true,
+                    attributeFilter: ["data-ml-theme", "style", "class"],
+                });
+                const app = window.parent.document.querySelector(".stApp");
+                if (app) {
+                    new MutationObserver(applyTheme).observe(app, {
+                        attributes: true,
+                        attributeFilter: ["data-ml-theme", "style", "class"],
+                    });
+                }
+            } catch (e) {}
+        }
 
         function sendMessageToStreamlit(type, data) {
             window.parent.postMessage({ isStreamlitMessage: true, type: type, ...data }, "*");
@@ -102,6 +181,7 @@
         window.addEventListener("message", function(event) {
             if (event.data.type === "streamlit:render") {
                 const args = event.data.args;
+                applyTheme();
                 const minH = args.min_height || 200;
                 isMini = minH <= 60;
 
@@ -144,6 +224,8 @@
         });
 
         window.addEventListener("load", function() {
+            applyTheme();
+            watchTheme();
             sendMessageToStreamlit("streamlit:componentReady", { apiVersion: 1 });
         });
     </script>

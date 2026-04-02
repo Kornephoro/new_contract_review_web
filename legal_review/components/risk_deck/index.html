@@ -3,6 +3,15 @@
 <head>
     <style>
         body { margin: 0; padding: 0; font-family: "Outfit", "Noto Sans SC", sans-serif; overflow: hidden; background: transparent; }
+        :root {
+            --deck-card-bg: #fffaf7;
+            --deck-card-border: #eadfd2;
+            --deck-body-fg: #2d2d2d;
+            --deck-muted-fg: #7a7672;
+            --deck-card-inset: rgba(0, 0, 0, 0.025);
+            --deck-neutral-badge-bg: rgba(255, 255, 255, 0.78);
+            --deck-neutral-badge-fg: #4f6278;
+        }
         .risk-deck-container {
             max-height: 860px;
             overflow-y: auto;
@@ -34,14 +43,97 @@
             transform: translateY(-1px);
             box-shadow: 0 14px 30px rgba(26, 31, 46, 0.08) !important;
         }
+        .risk-card,
+        .risk-card p,
+        .risk-card div,
+        .risk-card span,
+        .risk-card summary,
+        .risk-card details {
+            color: var(--deck-body-fg);
+        }
         .apply-btn:hover,
         .pick-btn:hover {
             transform: translateY(-1px);
             box-shadow: 0 8px 18px rgba(26, 31, 46, 0.08);
         }
+        body.dark ::-webkit-scrollbar-thumb { background: #4f5766; }
+        body.dark .title { color: #e8e4df; }
+        body.dark .subtitle { color: #a7b0bc; }
+        body.dark {
+            --deck-card-bg: linear-gradient(145deg, rgba(24, 30, 42, 0.98) 0%, rgba(18, 23, 33, 0.98) 100%);
+            --deck-card-border: #384154;
+            --deck-body-fg: #e8e4df;
+            --deck-muted-fg: #a7b0bc;
+            --deck-card-inset: rgba(255, 255, 255, 0.05);
+            --deck-neutral-badge-bg: rgba(255, 255, 255, 0.08);
+            --deck-neutral-badge-fg: #d6dde7;
+        }
+        body.dark .risk-card {
+            box-shadow: 0 12px 26px rgba(0, 0, 0, 0.22) !important;
+        }
+        body.dark .risk-card:hover {
+            box-shadow: 0 14px 30px rgba(0, 0, 0, 0.28) !important;
+        }
     </style>
     <script>
         let isRendered = false;
+
+        function parseColor(value) {
+            const v = (value || "").trim();
+            if (!v) return null;
+            if (v.startsWith("#")) {
+                const hex = v.slice(1);
+                const full = hex.length === 3 ? hex.split("").map(ch => ch + ch).join("") : hex;
+                if (full.length !== 6) return null;
+                return {
+                    r: parseInt(full.slice(0, 2), 16),
+                    g: parseInt(full.slice(2, 4), 16),
+                    b: parseInt(full.slice(4, 6), 16),
+                };
+            }
+            const m = v.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+            if (!m) return null;
+            return { r: parseInt(m[1], 10), g: parseInt(m[2], 10), b: parseInt(m[3], 10) };
+        }
+
+        function detectDarkTheme() {
+            try {
+                const root = window.parent.document.documentElement;
+                const themeAttr = root.getAttribute("data-ml-theme");
+                if (themeAttr === "dark") return true;
+                if (themeAttr === "light") return false;
+                const main = window.parent.document.querySelector('[data-testid="stAppViewContainer"] > .main');
+                const app = window.parent.document.querySelector(".stApp");
+                const styles = window.parent.getComputedStyle(main || app || root);
+                const bg = parseColor(styles.backgroundColor);
+                if (!bg) return false;
+                const luminance = (0.2126 * bg.r + 0.7152 * bg.g + 0.0722 * bg.b) / 255;
+                return luminance < 0.5;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function applyTheme() {
+            document.body.classList.toggle("dark", detectDarkTheme());
+        }
+
+        function watchTheme() {
+            try {
+                const root = window.parent.document.documentElement;
+                new MutationObserver(applyTheme).observe(root, {
+                    attributes: true,
+                    attributeFilter: ["data-ml-theme", "style", "class"],
+                });
+                const app = window.parent.document.querySelector(".stApp");
+                if (app) {
+                    new MutationObserver(applyTheme).observe(app, {
+                        attributes: true,
+                        attributeFilter: ["style", "class", "data-ml-theme"],
+                    });
+                }
+            } catch (e) {}
+        }
 
         function sendMessageToStreamlit(type, data) {
             window.parent.postMessage({ isStreamlitMessage: true, type: type, ...data }, "*");
@@ -55,6 +147,7 @@
         window.addEventListener("message", function(event) {
             if (event.data.type === "streamlit:render") {
                 const args = event.data.args;
+                applyTheme();
                 
                 if (args.cards_html) {
                     document.getElementById("cards-wrapper").innerHTML = args.cards_html;
@@ -86,6 +179,9 @@
         window.addEventListener("load", function() {
             sendMessageToStreamlit("streamlit:componentReady", {apiVersion: 1});
         });
+
+        applyTheme();
+        watchTheme();
     </script>
 </head>
 <body>

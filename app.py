@@ -192,65 +192,42 @@ def cached_mcp_tools(path_str: str, mtime: float, enabled: bool) -> Tuple[list, 
 THEME_MAP = {"跟随系统": "system", "浅色": "light", "深色": "dark"}
 
 
+def _active_theme_key() -> str:
+    base = (st.get_option("theme.base") or "light").strip().lower()
+    return "dark" if base == "dark" else "light"
+
+
 def _spans_overlap(a0, a1, b0, b1):
     return not (a1 <= b0 or b1 <= a0)
 
 
 def _panel_palette(theme_key: str) -> dict:
     """合同面板固定对比色——墨律设计系统。"""
-    if theme_key == "light":
-        return {
-            "panel_bg": "#faf8f5",
-            "panel_fg": "#1a1f2e",
-            "border": "#e2ddd5",
-            "muted": "#8a857f",
-        }
-    if theme_key == "dark":
-        return {
-            "panel_bg": "#252a3a",
-            "panel_fg": "#e8e4df",
-            "border": "#353a4d",
-            "muted": "#b0aca6",
-        }
     return {
-        "panel_bg": "#faf8f5",
-        "panel_fg": "#1a1f2e",
-        "border": "#e2ddd5",
-        "muted": "#8a857f",
+        "panel_bg": "var(--ml-shell-surface)",
+        "panel_fg": "var(--ml-shell-text)",
+        "border": "var(--ml-shell-border)",
+        "muted": "var(--ml-shell-muted)",
     }
 
 
 def _risk_level_styles(theme_key: str) -> dict:
-    if theme_key == "dark":
-        return {
-            "高风险": ("rgba(180, 70, 65, 0.30)", "#e89490"),
-            "中风险": ("rgba(180, 140, 50, 0.25)", "#e0c470"),
-            "低风险": ("rgba(80, 120, 180, 0.22)", "#8ab0d8"),
-        }
     return {
-        "高风险": ("rgba(155, 48, 48, 0.14)", "#9b3030"),
-        "中风险": ("rgba(139, 106, 37, 0.14)", "#8b6a25"),
-        "低风险": ("rgba(58, 90, 139, 0.10)", "#3a5a8b"),
+        "高风险": ("rgba(207, 99, 92, 0.16)", "#cf635c"),
+        "中风险": ("rgba(184, 135, 49, 0.16)", "#b88731"),
+        "低风险": ("rgba(98, 130, 167, 0.16)", "#6282a7"),
     }
 
 
 def _highlight_border_for_risk(risk: dict, theme_key: str) -> Tuple[str, str]:
     """优先按四维 dimension 着色，否则按风险等级。"""
     dim = (risk.get("dimension") or "").strip()
-    if theme_key == "dark":
-        dm = {
-            "法律合规": ("rgba(90, 130, 190, 0.22)", "#8ab0d8"),
-            "风险防控": ("rgba(180, 70, 65, 0.25)", "#e89490"),
-            "条款完善": ("rgba(180, 140, 50, 0.22)", "#e0c470"),
-            "利益保护": ("rgba(70, 150, 90, 0.20)", "#7dc09a"),
-        }
-    else:
-        dm = {
-            "法律合规": ("rgba(44, 74, 110, 0.12)", "#2c4a6e"),
-            "风险防控": ("rgba(139, 53, 53, 0.14)", "#8b3535"),
-            "条款完善": ("rgba(139, 106, 37, 0.14)", "#8b6a25"),
-            "利益保护": ("rgba(46, 107, 69, 0.12)", "#2e6b45"),
-        }
+    dm = {
+        "法律合规": ("rgba(98, 130, 167, 0.16)", "#6282a7"),
+        "风险防控": ("rgba(207, 99, 92, 0.16)", "#cf635c"),
+        "条款完善": ("rgba(184, 135, 49, 0.16)", "#b88731"),
+        "利益保护": ("rgba(91, 160, 110, 0.16)", "#5ba06e"),
+    }
     if dim in dm:
         return dm[dim]
     level = risk.get("level", "低风险")
@@ -310,12 +287,13 @@ def build_highlighted_contract_html(
         num = idx + 1
         
         if applied_risks and idx in applied_risks:
-            bg = "rgba(46, 107, 69, 0.18)" if theme_key == "dark" else "rgba(46, 107, 69, 0.10)"
-            border = "#7dc09a" if theme_key == "dark" else "#2e6b45"
+            bg = "rgba(91, 160, 110, 0.16)"
+            border = "#5ba06e"
             inner_text = risks[idx].get("suggestion", "")
             orig_txt = html.escape(text[pos:end])
             sug_txt = html.escape(inner_text)
-            inner = f'<span style="color:#2e6b45;font-weight:600;">{sug_txt}</span>'
+            applied_text_color = "#5ba06e"
+            inner = f'<span style="color:{applied_text_color};font-weight:600;">{sug_txt}</span>'
             parts.append(
                 f'<span id="risk-anchor-{idx}" style="scroll-margin-top:88px;background:{bg};border-bottom:2px solid {border};'
                 f'padding:2px 4px;border-radius:4px;color:inherit;" title="已应用修改，原文本为：{orig_txt}">{inner}'
@@ -336,143 +314,65 @@ def build_highlighted_contract_html(
     pal = _panel_palette(theme_key)
     inner = "".join(parts)
 
-    is_dark = theme_key == "dark"
-    shell_bg = "rgba(29, 34, 48, 0.82)" if is_dark else "rgba(255, 252, 247, 0.72)"
-    shell_border = "#343a4c" if is_dark else "#e6ddd0"
-    shell_shadow = "0 20px 50px rgba(8, 12, 22, 0.26)" if is_dark else "0 18px 40px rgba(36, 40, 52, 0.08)"
-    paper_bg = "#202634" if is_dark else "#fffefb"
-    paper_border = "#3d4457" if is_dark else "#ece3d6"
-    paper_shadow = "0 18px 36px rgba(0, 0, 0, 0.24)" if is_dark else "0 16px 30px rgba(42, 44, 57, 0.08)"
-    line_color = "rgba(212, 176, 112, 0.25)" if is_dark else "rgba(184, 148, 95, 0.18)"
-    title_color = "#f0ebe4" if is_dark else "#5f584f"
+    shell_bg = "var(--ml-shell-surface-strong)"
+    shell_border = "var(--ml-shell-border)"
+    shell_shadow = "0 18px 36px rgba(0,0,0,0.12)"
+    paper_bg = "var(--ml-shell-surface)"
+    paper_border = "var(--ml-shell-border)"
+    paper_shadow = "0 14px 28px rgba(0,0,0,0.10)"
+    line_color = "color-mix(in srgb, var(--ml-accent-gold) 18%, transparent)"
+    title_color = "var(--ml-shell-muted)"
     body_color = pal["panel_fg"]
-    header_strip = (
-        "linear-gradient(90deg, rgba(212,176,112,0.95), rgba(122,158,212,0.24))"
-        if is_dark
-        else "linear-gradient(90deg, rgba(184,148,95,0.90), rgba(44,62,107,0.14))"
+    header_strip = "linear-gradient(90deg, var(--ml-accent-gold), rgba(44,62,107,0.18))"
+    wrapper = (
+        f'<div style="padding:18px;border-radius:24px;background:{shell_bg};border:1px solid {shell_border};'
+        f'box-shadow:{shell_shadow};">'
+        f'<div style="max-width:860px;margin:0 auto;border-radius:20px;background:{paper_bg};'
+        f'border:1px solid {paper_border};box-shadow:{paper_shadow};overflow:hidden;">'
+        f'<div style="height:5px;background:{header_strip};"></div>'
+        f'<div style="padding:16px 24px 12px 24px;border-bottom:1px solid {line_color};'
+        f'font-family:Outfit,Noto Sans SC,sans-serif;font-size:0.76rem;letter-spacing:0.14em;'
+        f'text-transform:uppercase;color:{title_color};">Contract Draft</div>'
+        f'<div style="max-height:780px;overflow-y:auto;padding:22px 30px 34px 30px;color:{body_color};'
+        f'white-space:pre-wrap;word-break:break-word;line-height:1.88;font-size:1rem;'
+        f'font-family:Outfit,Noto Sans SC,sans-serif;'
+        f'background-image:linear-gradient(to bottom, {line_color} 1px, transparent 1px);'
+        f'background-size:100% 2.05rem;">{inner}</div>'
+        f'</div></div>'
     )
-
-    if theme_key == "system":
-        wrapper = (
-            "<style>"
-            ".review-paper-shell{padding:18px;border-radius:24px;background:rgba(255,252,247,0.72);"
-            "border:1px solid #e6ddd0;box-shadow:0 18px 40px rgba(36,40,52,0.08);}"
-            ".review-paper{max-width:860px;margin:0 auto;border-radius:20px;background:#fffefb;"
-            "border:1px solid #ece3d6;box-shadow:0 16px 30px rgba(42,44,57,0.08);overflow:hidden;}"
-            ".review-paper-head{padding:16px 24px 12px 24px;border-bottom:1px solid rgba(184,148,95,0.14);"
-            "font-family:Outfit,Noto Sans SC,sans-serif;font-size:0.76rem;letter-spacing:0.14em;text-transform:uppercase;color:#5f584f;}"
-            ".review-paper-body{max-height:640px;overflow-y:auto;padding:22px 30px 34px 30px;color:#1a1f2e;"
-            "white-space:pre-wrap;word-break:break-word;line-height:1.88;font-size:1rem;font-family:Outfit,Noto Sans SC,sans-serif;"
-            "background-image:linear-gradient(to bottom, rgba(184,148,95,0.18) 1px, transparent 1px);background-size:100% 2.05rem;}"
-            ".review-paper-topline{height:5px;background:linear-gradient(90deg, rgba(184,148,95,0.90), rgba(44,62,107,0.14));}"
-            "@media (prefers-color-scheme: dark) {"
-            ".review-paper-shell{background:rgba(29,34,48,0.82)!important;border-color:#343a4c!important;box-shadow:0 20px 50px rgba(8,12,22,0.26)!important;}"
-            ".review-paper{background:#202634!important;border-color:#3d4457!important;box-shadow:0 18px 36px rgba(0,0,0,0.24)!important;}"
-            ".review-paper-head{color:#f0ebe4!important;border-bottom-color:rgba(212,176,112,0.20)!important;}"
-            ".review-paper-body{color:#e8e4df!important;background-image:linear-gradient(to bottom, rgba(212,176,112,0.24) 1px, transparent 1px)!important;}"
-            ".review-paper-topline{background:linear-gradient(90deg, rgba(212,176,112,0.95), rgba(122,158,212,0.24))!important;}"
-            "}"
-            "</style>"
-            f'<div class="review-paper-shell"><div class="review-paper"><div class="review-paper-topline"></div>'
-            f'<div class="review-paper-head">Contract Draft</div>'
-            f'<div class="review-paper-body">{inner}</div></div></div>'
-        )
-    else:
-        wrapper = (
-            f'<div style="padding:18px;border-radius:24px;background:{shell_bg};border:1px solid {shell_border};'
-            f'box-shadow:{shell_shadow};">'
-            f'<div style="max-width:860px;margin:0 auto;border-radius:20px;background:{paper_bg};'
-            f'border:1px solid {paper_border};box-shadow:{paper_shadow};overflow:hidden;">'
-            f'<div style="height:5px;background:{header_strip};"></div>'
-            f'<div style="padding:16px 24px 12px 24px;border-bottom:1px solid {line_color};'
-            f'font-family:Outfit,Noto Sans SC,sans-serif;font-size:0.76rem;letter-spacing:0.14em;'
-            f'text-transform:uppercase;color:{title_color};">Contract Draft</div>'
-            f'<div style="max-height:640px;overflow-y:auto;padding:22px 30px 34px 30px;color:{body_color};'
-            f'white-space:pre-wrap;word-break:break-word;line-height:1.88;font-size:1rem;'
-            f'font-family:Outfit,Noto Sans SC,sans-serif;'
-            f'background-image:linear-gradient(to bottom, {line_color} 1px, transparent 1px);'
-            f'background-size:100% 2.05rem;">{inner}</div>'
-            f'</div></div>'
-        )
     return wrapper, not_found
 
 
 def _legend_html(theme_key: str) -> str:
-    if theme_key == "dark":
-        return (
-            '<div style="margin-bottom:10px;font-family:Outfit,Noto Sans SC,sans-serif;font-size:0.82rem;'
-            'display:flex;gap:14px;align-items:center;">'
-            '<span style="display:inline-flex;align-items:center;gap:5px;">'
-            '<span style="width:8px;height:8px;border-radius:50%;background:#e89490;display:inline-block;"></span>'
-            '<span style="color:#e89490;font-weight:600;">高风险</span></span>'
-            '<span style="display:inline-flex;align-items:center;gap:5px;">'
-            '<span style="width:8px;height:8px;border-radius:50%;background:#e0c470;display:inline-block;"></span>'
-            '<span style="color:#e0c470;font-weight:600;">中风险</span></span>'
-            '<span style="display:inline-flex;align-items:center;gap:5px;">'
-            '<span style="width:8px;height:8px;border-radius:50%;background:#8ab0d8;display:inline-block;"></span>'
-            '<span style="color:#8ab0d8;font-weight:600;">低风险</span></span>'
-            "</div>"
-        )
-    if theme_key == "system":
-        return (
-            "<style>"
-            ".legend-sys .dot-h { background:#9b3030; }"
-            ".legend-sys .lbl-h { color:#9b3030; }"
-            ".legend-sys .dot-m { background:#8b6a25; }"
-            ".legend-sys .lbl-m { color:#8b6a25; }"
-            ".legend-sys .dot-l { background:#3a5a8b; }"
-            ".legend-sys .lbl-l { color:#3a5a8b; }"
-            "@media (prefers-color-scheme: dark) {"
-            ".legend-sys .dot-h { background:#e89490; }"
-            ".legend-sys .lbl-h { color:#e89490; }"
-            ".legend-sys .dot-m { background:#e0c470; }"
-            ".legend-sys .lbl-m { color:#e0c470; }"
-            ".legend-sys .dot-l { background:#8ab0d8; }"
-            ".legend-sys .lbl-l { color:#8ab0d8; }"
-            "}"
-            "</style>"
-            '<div class="legend-sys" style="margin-bottom:10px;font-family:Outfit,Noto Sans SC,sans-serif;'
-            'font-size:0.82rem;display:flex;gap:14px;align-items:center;">'
-            '<span style="display:inline-flex;align-items:center;gap:5px;">'
-            '<span class="dot-h" style="width:8px;height:8px;border-radius:50%;display:inline-block;"></span>'
-            '<span class="lbl-h" style="font-weight:600;">高风险</span></span>'
-            '<span style="display:inline-flex;align-items:center;gap:5px;">'
-            '<span class="dot-m" style="width:8px;height:8px;border-radius:50%;display:inline-block;"></span>'
-            '<span class="lbl-m" style="font-weight:600;">中风险</span></span>'
-            '<span style="display:inline-flex;align-items:center;gap:5px;">'
-            '<span class="dot-l" style="width:8px;height:8px;border-radius:50%;display:inline-block;"></span>'
-            '<span class="lbl-l" style="font-weight:600;">低风险</span></span>'
-            "</div>"
-        )
     return (
         '<div style="margin-bottom:10px;font-family:Outfit,Noto Sans SC,sans-serif;font-size:0.82rem;'
         'display:flex;gap:14px;align-items:center;">'
         '<span style="display:inline-flex;align-items:center;gap:5px;">'
-        '<span style="width:8px;height:8px;border-radius:50%;background:#9b3030;display:inline-block;"></span>'
-        '<span style="color:#9b3030;font-weight:600;">高风险</span></span>'
+        '<span style="width:8px;height:8px;border-radius:50%;background:#cf635c;display:inline-block;"></span>'
+        '<span style="color:#cf635c;font-weight:600;">高风险</span></span>'
         '<span style="display:inline-flex;align-items:center;gap:5px;">'
-        '<span style="width:8px;height:8px;border-radius:50%;background:#8b6a25;display:inline-block;"></span>'
-        '<span style="color:#8b6a25;font-weight:600;">中风险</span></span>'
+        '<span style="width:8px;height:8px;border-radius:50%;background:#b88731;display:inline-block;"></span>'
+        '<span style="color:#b88731;font-weight:600;">中风险</span></span>'
         '<span style="display:inline-flex;align-items:center;gap:5px;">'
-        '<span style="width:8px;height:8px;border-radius:50%;background:#3a5a8b;display:inline-block;"></span>'
-        '<span style="color:#3a5a8b;font-weight:600;">低风险</span></span>'
+        '<span style="width:8px;height:8px;border-radius:50%;background:#6282a7;display:inline-block;"></span>'
+        '<span style="color:#6282a7;font-weight:600;">低风险</span></span>'
         "</div>"
     )
 
 
-def _legend_dimensions_html() -> str:
+def _legend_dimensions_html(theme_key: str) -> str:
     return (
         '<div style="margin:6px 0 10px 0;font-family:Outfit,Noto Sans SC,sans-serif;font-size:0.78rem;'
-        'color:#8a857f;line-height:1.6;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">'
-        '<span style="font-weight:600;color:#5a5650;">四维审查</span>'
-        '<span style="color:#e2ddd5;">|</span>'
-        '<span style="color:#2c4a6e;font-weight:500;">法律合规</span>'
-        '<span style="color:#e2ddd5;">·</span>'
-        '<span style="color:#8b3535;font-weight:500;">风险防控</span>'
-        '<span style="color:#e2ddd5;">·</span>'
-        '<span style="color:#8b6a25;font-weight:500;">条款完善</span>'
-        '<span style="color:#e2ddd5;">·</span>'
-        '<span style="color:#2e6b45;font-weight:500;">利益保护</span>'
+        'color:var(--ml-shell-muted);line-height:1.6;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">'
+        '<span style="font-weight:600;color:var(--ml-shell-text);">四维审查</span>'
+        '<span style="color:var(--ml-shell-border);">|</span>'
+        '<span style="color:#6282a7;font-weight:500;">法律合规</span>'
+        '<span style="color:var(--ml-shell-border);">·</span>'
+        '<span style="color:#cf635c;font-weight:500;">风险防控</span>'
+        '<span style="color:var(--ml-shell-border);">·</span>'
+        '<span style="color:#b88731;font-weight:500;">条款完善</span>'
+        '<span style="color:var(--ml-shell-border);">·</span>'
+        '<span style="color:#5ba06e;font-weight:500;">利益保护</span>'
         "</div>"
     )
 
@@ -500,96 +400,98 @@ def _get_llm_client_and_model() -> Tuple[OpenAI, str, str, bool]:
     client = OpenAI(api_key=api_key or "sk-dummy", base_url=base_url)
     return client, model_name, provider_choice, use_tools
 
-def inject_page_theme_css(theme_choice: str) -> None:
-    key = THEME_MAP.get(theme_choice, "system")
-    if key == "light":
-        st.markdown(
-            """
-            <style>
-            .stApp {
-                background:
-                    radial-gradient(circle at top left, rgba(184, 148, 95, 0.14), transparent 22%),
-                    radial-gradient(circle at top right, rgba(44, 62, 107, 0.10), transparent 18%),
-                    linear-gradient(180deg, #fbf8f2 0%, #f3ede3 100%) !important;
-                color: var(--ml-text-primary) !important;
-            }
-            [data-testid="stHeader"] { background-color: var(--ml-bg-primary) !important; }
-            div[data-testid="stSidebar"] { background-color: var(--ml-bg-secondary) !important; border-right: 1px solid var(--ml-border) !important; }
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
-    elif key == "dark":
-        st.markdown(
-            """
-            <style>
-            :root {
-                --ml-bg-primary: #181c28;
-                --ml-bg-secondary: #1e2233;
-                --ml-bg-surface: #252a3a;
-                --ml-text-primary: #e8e4df;
-                --ml-text-secondary: #b0aca6;
-                --ml-text-muted: #7a7672;
-                --ml-accent-gold: #d4b070;
-                --ml-accent-navy: #7a9ed4;
-                --ml-border: #353a4d;
-                --ml-border-light: #2e3345;
-            }
-            .stApp {
-                background:
-                    radial-gradient(circle at top left, rgba(212, 176, 112, 0.10), transparent 20%),
-                    radial-gradient(circle at top right, rgba(122, 158, 212, 0.12), transparent 18%),
-                    linear-gradient(180deg, #141925 0%, #1a2030 100%) !important;
-                color: var(--ml-text-primary) !important;
-            }
-            [data-testid="stHeader"] { background-color: var(--ml-bg-primary) !important; }
-            div[data-testid="stSidebar"] { background-color: var(--ml-bg-secondary) !important; border-right: 1px solid var(--ml-border) !important; }
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
-    else:
-        st.markdown(
-            """
-            <style>
-            @media (prefers-color-scheme: dark) {
-              :root {
-                --ml-bg-primary: #181c28;
-                --ml-bg-secondary: #1e2233;
-                --ml-bg-surface: #252a3a;
-                --ml-text-primary: #e8e4df;
-                --ml-text-secondary: #b0aca6;
-                --ml-text-muted: #7a7672;
-                --ml-accent-gold: #d4b070;
-                --ml-accent-navy: #7a9ed4;
-                --ml-border: #353a4d;
-                --ml-border-light: #2e3345;
+def inject_page_theme_css() -> None:
+    """读取前端真实明暗状态，只切换 DOM 标记，不触发 rerun。"""
+    components.html(
+        """
+        <!doctype html>
+        <html>
+          <body style="margin:0;background:transparent;">
+            <script>
+              function parseColor(value) {
+                const v = (value || "").trim();
+                if (!v) return null;
+                if (v.startsWith("#")) {
+                  const hex = v.slice(1);
+                  const full = hex.length === 3 ? hex.split("").map(ch => ch + ch).join("") : hex;
+                  if (full.length !== 6) return null;
+                  return {
+                    r: parseInt(full.slice(0, 2), 16),
+                    g: parseInt(full.slice(2, 4), 16),
+                    b: parseInt(full.slice(4, 6), 16),
+                  };
+                }
+                const m = v.match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/i);
+                if (!m) return null;
+                return { r: parseInt(m[1], 10), g: parseInt(m[2], 10), b: parseInt(m[3], 10) };
               }
-              .stApp {
-                background:
-                    radial-gradient(circle at top left, rgba(212, 176, 112, 0.10), transparent 20%),
-                    radial-gradient(circle at top right, rgba(122, 158, 212, 0.12), transparent 18%),
-                    linear-gradient(180deg, #141925 0%, #1a2030 100%) !important;
-                color: var(--ml-text-primary) !important;
+
+              function detectTheme() {
+                try {
+                  const parentDoc = window.parent.document;
+                  const root = parentDoc.documentElement;
+                  const app = parentDoc.querySelector(".stApp");
+                  const main = parentDoc.querySelector('[data-testid="stAppViewContainer"] > .main');
+                  const mainStyles = window.parent.getComputedStyle(main || app || root);
+                  const appStyles = window.parent.getComputedStyle(app || root);
+                  const rootStyles = window.parent.getComputedStyle(root);
+                  const bg =
+                    parseColor(mainStyles.backgroundColor) ||
+                    parseColor(appStyles.backgroundColor) ||
+                    parseColor(rootStyles.backgroundColor);
+                  const fg =
+                    parseColor(mainStyles.color) ||
+                    parseColor(appStyles.color) ||
+                    parseColor(rootStyles.color);
+                  if (!bg && !fg) return "light";
+                  const luminance = bg
+                    ? (0.2126 * bg.r + 0.7152 * bg.g + 0.0722 * bg.b) / 255
+                    : 1;
+                  const textLuminance = fg
+                    ? (0.2126 * fg.r + 0.7152 * fg.g + 0.0722 * fg.b) / 255
+                    : 0;
+                  if (luminance < 0.42 || textLuminance > 0.72) return "dark";
+                  return "light";
+                } catch (e) {
+                  return "light";
+                }
               }
-              [data-testid="stHeader"] { background-color: var(--ml-bg-primary) !important; }
-              div[data-testid="stSidebar"] { background-color: var(--ml-bg-secondary) !important; border-right: 1px solid var(--ml-border) !important; }
-            }
-            @media (prefers-color-scheme: light) {
-              .stApp {
-                background:
-                    radial-gradient(circle at top left, rgba(184, 148, 95, 0.14), transparent 22%),
-                    radial-gradient(circle at top right, rgba(44, 62, 107, 0.10), transparent 18%),
-                    linear-gradient(180deg, #fbf8f2 0%, #f3ede3 100%) !important;
-                color: var(--ml-text-primary) !important;
+
+              function applyThemeFlag() {
+                try {
+                  const theme = detectTheme();
+                  const parentDoc = window.parent.document;
+                  const root = parentDoc.documentElement;
+                  const body = parentDoc.body;
+                  root.setAttribute("data-ml-theme", theme);
+                  if (body) body.setAttribute("data-ml-theme", theme);
+                  const app = parentDoc.querySelector(".stApp");
+                  if (app) app.setAttribute("data-ml-theme", theme);
+                  const sidebar = parentDoc.querySelector('[data-testid="stSidebar"]');
+                  if (sidebar) sidebar.setAttribute("data-ml-theme", theme);
+                } catch (e) {}
               }
-              [data-testid="stHeader"] { background-color: var(--ml-bg-primary) !important; }
-              div[data-testid="stSidebar"] { background-color: var(--ml-bg-secondary) !important; border-right: 1px solid var(--ml-border) !important; }
-            }
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
+
+              applyThemeFlag();
+              new MutationObserver(applyThemeFlag).observe(window.parent.document.documentElement, {
+                attributes: true,
+                attributeFilter: ["style", "class"],
+              });
+              const appNode = window.parent.document.querySelector(".stApp");
+              if (appNode) {
+                new MutationObserver(applyThemeFlag).observe(appNode, {
+                  attributes: true,
+                  attributeFilter: ["style", "class"],
+                });
+              }
+              setInterval(applyThemeFlag, 1200);
+            </script>
+          </body>
+        </html>
+        """,
+        height=0,
+        width=0,
+    )
 
 
 # 初始化持久化配置
@@ -645,25 +547,41 @@ st.markdown(
         --ml-risk-high: #9b3030;
         --ml-risk-mid: #8b6a25;
         --ml-risk-low: #3a5a8b;
+        --ml-shell-surface: #f2efe9;
+        --ml-shell-surface-strong: #faf8f5;
+        --ml-shell-surface-soft: #f6f2eb;
+        --ml-shell-border: rgba(26, 31, 46, 0.14);
+        --ml-shell-muted: rgba(26, 31, 46, 0.68);
+        --ml-shell-text: #1a1f2e;
+        --ml-shell-primary: #405989;
+        --ml-shell-primary-strong: #31466d;
+    }
+
+    html[data-ml-theme="light"] {
+        --ml-shell-surface: #f2efe9;
+        --ml-shell-surface-strong: #faf8f5;
+        --ml-shell-surface-soft: #f6f2eb;
+        --ml-shell-border: rgba(26, 31, 46, 0.14);
+        --ml-shell-muted: rgba(26, 31, 46, 0.68);
+        --ml-shell-text: #1a1f2e;
+        --ml-shell-primary: #405989;
+        --ml-shell-primary-strong: #31466d;
+    }
+
+    html[data-ml-theme="dark"] {
+        --ml-shell-surface: #1d2431;
+        --ml-shell-surface-strong: #151b26;
+        --ml-shell-surface-soft: #232b39;
+        --ml-shell-border: rgba(232, 228, 223, 0.16);
+        --ml-shell-muted: rgba(232, 228, 223, 0.68);
+        --ml-shell-text: #e8e4df;
+        --ml-shell-primary: #4d689d;
+        --ml-shell-primary-strong: #3d5480;
     }
 
     /* ── Streamlit 全局覆盖 ── */
     .stApp {
         font-family: var(--ml-font-body) !important;
-        background:
-            radial-gradient(circle at 12% 10%, rgba(184, 148, 95, 0.18), transparent 18%),
-            radial-gradient(circle at 86% 8%, rgba(44, 62, 107, 0.14), transparent 20%),
-            linear-gradient(180deg, #f8f3ea 0%, #efe6d9 100%) !important;
-    }
-    [data-testid="stAppViewContainer"]::before {
-        content: "";
-        position: fixed;
-        inset: 0;
-        pointer-events: none;
-        background-image: radial-gradient(rgba(26,31,46,0.035) 0.6px, transparent 0.6px);
-        background-size: 12px 12px;
-        opacity: 0.22;
-        mix-blend-mode: multiply;
     }
     [data-testid="stAppViewContainer"] > .main .block-container {
         max-width: 1580px;
@@ -679,7 +597,7 @@ st.markdown(
     }
     .stApp h1 {
         font-size: 2.2rem !important;
-        color: var(--ml-text-primary) !important;
+        color: var(--ml-shell-text) !important;
     }
 
     /* Sidebar */
@@ -702,13 +620,15 @@ st.markdown(
         font-weight: 500 !important;
         font-size: 0.95rem !important;
         padding: 10px 24px !important;
-        color: var(--ml-text-muted) !important;
+        color: var(--ml-shell-text) !important;
+        opacity: 0.68;
         border-bottom: 2px solid transparent !important;
         transition: all 0.2s ease;
     }
     .stTabs [aria-selected="true"] {
-        color: var(--ml-accent-navy) !important;
-        border-bottom-color: var(--ml-accent-gold) !important;
+        color: var(--ml-shell-primary) !important;
+        opacity: 1;
+        border-bottom-color: var(--ml-shell-primary) !important;
         font-weight: 600 !important;
     }
     .stTabs [data-baseweb="tab-panel"] {
@@ -723,6 +643,7 @@ st.markdown(
         border-radius: 8px !important;
         background: linear-gradient(135deg, #344a77, #263657) !important;
         border: none !important;
+        color: #ffffff !important;
         letter-spacing: 0.02em;
         transition: all 0.25s ease;
     }
@@ -735,9 +656,9 @@ st.markdown(
     .stButton > button[data-testid="stBaseButton-secondary"] {
         font-family: var(--ml-font-body) !important;
         border-radius: 8px !important;
-        border: 1.5px solid var(--ml-border) !important;
-        background: rgba(255, 253, 249, 0.72) !important;
-        color: var(--ml-text-secondary) !important;
+        border: 1.5px solid var(--ml-shell-border) !important;
+        background: var(--ml-shell-surface) !important;
+        color: var(--ml-shell-text) !important;
         transition: all 0.2s ease;
     }
     .stButton > button[kind="secondary"]:hover,
@@ -755,12 +676,24 @@ st.markdown(
     .stTextInput input, .stTextArea textarea {
         font-family: var(--ml-font-body) !important;
         border-radius: 8px !important;
-        border-color: var(--ml-border) !important;
-        background: rgba(255, 253, 249, 0.82) !important;
+        border-color: var(--ml-shell-border) !important;
+        background: var(--ml-shell-surface) !important;
+        color: var(--ml-shell-text) !important;
+        -webkit-text-fill-color: var(--ml-shell-text) !important;
     }
     .stTextInput input:focus, .stTextArea textarea:focus {
         border-color: var(--ml-accent-gold) !important;
         box-shadow: 0 0 0 2px rgba(184, 148, 95, 0.15) !important;
+    }
+    .stTextInput input::placeholder, .stTextArea textarea::placeholder {
+        color: var(--ml-shell-muted) !important;
+        -webkit-text-fill-color: var(--ml-shell-muted) !important;
+    }
+    .stSelectbox [data-baseweb="select"] > div,
+    .stMultiSelect [data-baseweb="select"] > div {
+        background: var(--ml-shell-surface) !important;
+        border-color: var(--ml-shell-border) !important;
+        color: var(--ml-shell-text) !important;
     }
 
     /* Scrollbar */
@@ -778,14 +711,18 @@ st.markdown(
         right: 1rem;
     }
     .intake-shell {
-        padding: 22px 24px 20px 24px;
+        padding: 18px 22px 16px 22px;
         border-radius: 26px;
-        background: linear-gradient(145deg, rgba(255,252,247,0.95) 0%, rgba(244,236,224,0.96) 100%);
-        border: 1px solid rgba(184,148,95,0.18);
-        box-shadow: 0 22px 48px rgba(26,31,46,0.08);
+        background:
+            radial-gradient(circle at 88% 84%, rgba(184,148,95,0.10), transparent 16%),
+            radial-gradient(circle at 12% 10%, rgba(184,148,95,0.08), transparent 18%),
+            linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%),
+            var(--ml-shell-surface);
+        border: 1px solid rgba(184,148,95,0.20);
+        box-shadow: 0 18px 38px rgba(26,31,46,0.12);
         position: relative;
         overflow: hidden;
-        margin-bottom: 16px;
+        margin-bottom: 14px;
     }
     .intake-shell::before {
         content: "";
@@ -818,56 +755,133 @@ st.markdown(
     }
     .intake-title {
         font-family: var(--ml-font-display);
-        font-size: 2rem;
+        font-size: 1.72rem;
         line-height: 1.05;
-        color: var(--ml-text-primary);
+        color: var(--ml-shell-text);
         margin: 0;
         position: relative;
         z-index: 1;
     }
     .intake-copy {
-        font-size: 0.92rem;
-        color: #6c665f;
-        line-height: 1.8;
+        font-size: 0.9rem;
+        color: var(--ml-shell-text);
+        opacity: 0.76;
+        line-height: 1.72;
         max-width: 48rem;
-        margin-top: 10px;
+        margin-top: 8px;
         position: relative;
         z-index: 1;
     }
-    .status-strip {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 10px;
-        margin: 16px 0 0 0;
-        position: relative;
-        z-index: 1;
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        border-radius: 24px !important;
+        border: 1px solid rgba(184,148,95,0.16) !important;
+        background: var(--ml-shell-surface) !important;
+        box-shadow: 0 18px 38px rgba(26,31,46,0.06) !important;
+        padding: 0.7rem 0.9rem 0.95rem 0.9rem !important;
     }
-    .status-card {
+    div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stMarkdownContainer"],
+    div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stMarkdownContainer"] p,
+    div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stMarkdownContainer"] div,
+    div[data-testid="stVerticalBlockBorderWrapper"] label,
+    div[data-testid="stVerticalBlockBorderWrapper"] small,
+    div[data-testid="stVerticalBlockBorderWrapper"] span {
+        color: var(--ml-shell-text) !important;
+    }
+    .home-card-title {
+        font-family: var(--ml-font-display);
+        font-size: 1.42rem;
+        font-weight: 700;
+        color: var(--ml-shell-text) !important;
+        margin-bottom: 0;
+    }
+    .home-card-copy {
+        font-family: var(--ml-font-body);
+        font-size: 0.88rem;
+        color: var(--ml-shell-text) !important;
+        opacity: 0.78;
+        line-height: 1.72;
+        margin: 4px 0 10px 0;
+        max-width: 36rem;
+    }
+    .home-section-label {
+        font-family: var(--ml-font-body);
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--ml-shell-primary) !important;
+        margin: 10px 0 6px 0;
+    }
+    .home-chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 8px 0 10px 0;
+    }
+    .home-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: var(--ml-shell-surface-strong) !important;
+        border: 1px solid rgba(184,148,95,0.16);
+        color: var(--ml-shell-text) !important;
+        font-size: 0.8rem;
+        line-height: 1.2;
+    }
+    .home-note {
         padding: 12px 14px;
         border-radius: 16px;
-        background: rgba(255,255,255,0.62);
+        background: var(--ml-shell-surface-strong) !important;
         border: 1px solid rgba(184,148,95,0.14);
-        backdrop-filter: blur(8px);
-    }
-    .status-label {
-        font-size: 0.72rem;
-        color: #8a857f;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-    }
-    .status-value {
-        font-size: 1rem;
-        color: var(--ml-text-primary);
-        font-weight: 700;
+        color: var(--ml-shell-text) !important;
+        font-size: 0.86rem;
+        line-height: 1.68;
         margin-top: 4px;
     }
-    .report-shell {
-        padding: 20px 22px;
-        border-radius: 24px;
-        background: rgba(255,251,246,0.82);
-        border: 1px solid rgba(184,148,95,0.16);
-        box-shadow: 0 18px 38px rgba(26,31,46,0.06);
-        min-height: 240px;
+    .home-placeholder {
+        padding: 14px 16px;
+        border-radius: 16px;
+        background: var(--ml-shell-surface-strong) !important;
+        border: 1px solid rgba(44,62,107,0.16);
+        color: var(--ml-shell-text) !important;
+        font-size: 0.92rem;
+        line-height: 1.68;
+        margin-top: 12px;
+    }
+    div[data-testid="stVerticalBlockBorderWrapper"] .stCaptionContainer,
+    div[data-testid="stVerticalBlockBorderWrapper"] .stCaptionContainer p {
+        color: var(--ml-shell-text) !important;
+        opacity: 0.75;
+    }
+    div[data-testid="stVerticalBlockBorderWrapper"] [data-baseweb="radio"] label,
+    div[data-testid="stVerticalBlockBorderWrapper"] [data-baseweb="radio"] div {
+        color: var(--ml-shell-text) !important;
+    }
+    div[data-testid="stFileUploader"] section {
+        background: var(--ml-shell-surface-strong) !important;
+        border: 1px dashed rgba(184,148,95,0.26) !important;
+        border-radius: 16px !important;
+    }
+    div[data-testid="stFileUploader"] button {
+        background: var(--ml-shell-surface) !important;
+        color: var(--ml-shell-text) !important;
+        border: 1px solid rgba(184,148,95,0.20) !important;
+    }
+    div[data-testid="stFileUploader"] small,
+    div[data-testid="stFileUploader"] span,
+    div[data-testid="stFileUploader"] label {
+        color: var(--ml-shell-text) !important;
+    }
+    div[data-testid="stVerticalBlockBorderWrapper"] div[data-baseweb="select"] > div,
+    div[data-testid="stVerticalBlockBorderWrapper"] div[data-baseweb="base-input"] > div {
+        background: var(--ml-shell-surface-strong) !important;
+        color: var(--ml-shell-text) !important;
+    }
+    div[data-testid="stVerticalBlockBorderWrapper"] textarea,
+    div[data-testid="stVerticalBlockBorderWrapper"] input {
+        color: var(--ml-shell-text) !important;
+        -webkit-text-fill-color: var(--ml-shell-text) !important;
     }
     </style>
     """,
@@ -876,13 +890,6 @@ st.markdown(
 
 with st.sidebar:
     st.header("⚙️ 系统配置")
-    st.radio(
-        "界面主题",
-        ["跟随系统", "浅色", "深色"],
-        horizontal=True,
-        key="ui_theme",
-        help="浅色/深色为固定配色；跟随系统则使用系统明暗与合同面板联动。",
-    )
     provider_choice = st.radio(
         "AI 提供商",
         ["Anthropic", "OpenAI", "Ollama (本地)"],
@@ -1020,14 +1027,14 @@ with st.sidebar:
         "以及可选的 **MCP 工具**挂接外部法律数据库。"
     )
 
-inject_page_theme_css(st.session_state.get("ui_theme", "跟随系统"))
+inject_page_theme_css()
 
 # --- 主页面 ---
 st.markdown(
     '<div style="margin-bottom:4px;">'
     '<h1 style="font-family:Cormorant Garamond,Noto Serif SC,serif !important;font-size:2.4rem !important;'
-    'font-weight:700;color:#1a1f2e;margin:0;letter-spacing:-0.02em;">智审法务</h1>'
-    '<p style="font-family:Outfit,Noto Sans SC,sans-serif;font-size:0.92rem;color:#8a857f;margin:4px 0 0 0;'
+    'font-weight:700;color:var(--ml-shell-text) !important;margin:0;letter-spacing:-0.02em;">智审法务</h1>'
+    '<p style="font-family:Outfit,Noto Sans SC,sans-serif;font-size:0.92rem;color:var(--ml-shell-text) !important;opacity:0.72;margin:4px 0 0 0;'
     'letter-spacing:0.03em;">AI-Powered Contract Risk Analysis</p>'
     '</div>',
     unsafe_allow_html=True,
@@ -1044,16 +1051,22 @@ if "risk_followup_chats" not in st.session_state:
     st.session_state.risk_followup_chats = {}
 if "focus_risk_idx" not in st.session_state:
     st.session_state.focus_risk_idx = None
+if "review_later_risks" not in st.session_state:
+    st.session_state.review_later_risks = set()
 if "modified_contract_text" not in st.session_state:
     st.session_state.modified_contract_text = ""
 if "applied_risks" not in st.session_state:
     st.session_state.applied_risks = set()
+if "workspace_notice" not in st.session_state:
+    st.session_state.workspace_notice = None
 if "original_file_bytes" not in st.session_state:
     st.session_state.original_file_bytes = None
 if "original_file_name" not in st.session_state:
     st.session_state.original_file_name = None
 if "last_uploaded_file_id" not in st.session_state:
     st.session_state.last_uploaded_file_id = None
+if "contract_input_mode" not in st.session_state:
+    st.session_state.contract_input_mode = "上传合同文件"
 if "show_export_dialog" not in st.session_state:
     st.session_state.show_export_dialog = False
 
@@ -1082,15 +1095,24 @@ def _build_highlight_cache_key(text: str, risks: list, theme_key: str, applied_r
     return hashlib.sha1(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
 
 
-def _count_review_statuses(risks: list[dict], applied_risks: set | None) -> dict[str, int]:
+def _count_review_statuses(
+    risks: list[dict],
+    applied_risks: set | None,
+    review_later_risks: set | None = None,
+) -> dict[str, int]:
     applied_set = applied_risks or set()
+    review_later_set = review_later_risks or set()
     accepted = len(applied_set)
     reviewable = 0
     info_only = 0
     pending = 0
+    review_later = 0
     for idx, risk in enumerate(risks or []):
         state = get_risk_suggestion_state(risk)
         if idx in applied_set:
+            continue
+        if idx in review_later_set:
+            review_later += 1
             continue
         if state["actionable"]:
             reviewable += 1
@@ -1100,6 +1122,7 @@ def _count_review_statuses(risks: list[dict], applied_risks: set | None) -> dict
             pending += 1
     return {
         "accepted": accepted,
+        "review_later": review_later,
         "reviewable": reviewable,
         "info_only": info_only,
         "pending": pending,
@@ -1114,13 +1137,22 @@ def _build_workspace_risk_list(risks: list[dict], dim_filter: str, sort_order: s
     if status_filter != "全部":
         filtered: list[tuple[int, dict]] = []
         applied_set = st.session_state.get("applied_risks", set())
+        review_later_set = st.session_state.get("review_later_risks", set())
         for idx, risk in risks_with_idx:
             state = get_risk_suggestion_state(risk)
-            if status_filter == "待处理" and idx not in applied_set:
+            if status_filter == "待处理" and idx not in applied_set and idx not in review_later_set:
+                filtered.append((idx, risk))
+            elif status_filter == "待复核" and idx not in applied_set and idx in review_later_set:
                 filtered.append((idx, risk))
             elif status_filter == "已采纳" and idx in applied_set:
                 filtered.append((idx, risk))
-            elif status_filter == "仅说明性意见" and idx not in applied_set and (not state["actionable"]) and state["has_display"]:
+            elif (
+                status_filter == "仅说明性意见"
+                and idx not in applied_set
+                and idx not in review_later_set
+                and (not state["actionable"])
+                and state["has_display"]
+            ):
                 filtered.append((idx, risk))
         risks_with_idx = filtered
     if sort_order == "风险高到低":
@@ -1136,11 +1168,29 @@ def _resolve_component_idx(new_idx: int, risks_with_idx: list[tuple[int, dict]])
 
 def _toggle_applied_risk(risk_idx: int) -> None:
     applied_set = set(st.session_state.get("applied_risks", set()))
+    review_later_set = set(st.session_state.get("review_later_risks", set()))
     if risk_idx in applied_set:
         applied_set.remove(risk_idx)
     else:
         applied_set.add(risk_idx)
+        review_later_set.discard(risk_idx)
     st.session_state.applied_risks = applied_set
+    st.session_state.review_later_risks = review_later_set
+
+
+def _toggle_review_later_risk(risk_idx: int) -> bool:
+    review_later_set = set(st.session_state.get("review_later_risks", set()))
+    applied_set = set(st.session_state.get("applied_risks", set()))
+    if risk_idx in review_later_set:
+        review_later_set.remove(risk_idx)
+        marked = False
+    else:
+        review_later_set.add(risk_idx)
+        applied_set.discard(risk_idx)
+        marked = True
+    st.session_state.review_later_risks = review_later_set
+    st.session_state.applied_risks = applied_set
+    return marked
 
 
 def _build_review_snapshot(final_text: str, contract_type: str, overview: dict, risks: list[dict], selected_template: Optional[dict]) -> dict:
@@ -1234,35 +1284,39 @@ def _render_workspace_header(
     risks = snap.get("risks") or []
     selected_template_name = (snap.get("selected_template_name") or "通用合同审校").strip()
     contract_type_name = snap.get("contract_type") or "未识别"
-    status_counts = _count_review_statuses(risks, st.session_state.get("applied_risks", set()))
+    status_counts = _count_review_statuses(
+        risks,
+        st.session_state.get("applied_risks", set()),
+        st.session_state.get("review_later_risks", set()),
+    )
     level_counts = {
         "高风险": sum(1 for risk in risks if risk.get("level") == "高风险"),
         "中风险": sum(1 for risk in risks if risk.get("level") == "中风险"),
         "低风险": sum(1 for risk in risks if risk.get("level") == "低风险"),
     }
-    is_dark = theme_key == "dark"
     meta_html = (
-        f'<div style="padding:18px 20px;border-radius:20px;background:{shell_bg};'
+        f'<div style="padding:16px 18px;border-radius:20px;background:{shell_bg};'
         f'border:1px solid {shell_border};box-shadow:{shell_shadow};font-family:Outfit,Noto Sans SC,sans-serif;">'
         f'<div style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:flex-start;">'
         f'<div>'
-        f'<div style="font-size:0.72rem;letter-spacing:0.12em;text-transform:uppercase;color:{"#d4b070" if is_dark else "#b8945f"};font-weight:700;margin-bottom:6px;">Review Desk</div>'
+        f'<div style="font-size:0.72rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--ml-accent-gold);font-weight:700;margin-bottom:6px;">Review Desk</div>'
         f'<div style="font-size:1.08rem;color:{shell_text};font-weight:600;">{html.escape(contract_type_name)}</div>'
         f'<div style="font-size:0.86rem;color:{shell_muted};margin-top:4px;line-height:1.7;">当前模板：{html.escape(selected_template_name)}</div>'
         f'</div>'
         f'<div style="display:grid;grid-template-columns:repeat(3, minmax(90px, 1fr));gap:10px;min-width:min(100%, 330px);">'
-        f'<div style="padding:10px 12px;border-radius:14px;background:{"rgba(255,255,255,0.06)" if is_dark else "rgba(255,255,255,0.7)"};border:1px solid {shell_border};">'
+        f'<div style="padding:10px 12px;border-radius:14px;background:var(--ml-shell-surface);border:1px solid {shell_border};">'
         f'<div style="font-size:0.72rem;color:{shell_muted};">风险总数</div><div style="font-size:1.08rem;color:{shell_text};font-weight:700;">{len(risks)}</div></div>'
-        f'<div style="padding:10px 12px;border-radius:14px;background:{"rgba(255,255,255,0.06)" if is_dark else "rgba(255,255,255,0.7)"};border:1px solid {shell_border};">'
+        f'<div style="padding:10px 12px;border-radius:14px;background:var(--ml-shell-surface);border:1px solid {shell_border};">'
         f'<div style="font-size:0.72rem;color:{shell_muted};">已采纳</div><div style="font-size:1.08rem;color:{shell_text};font-weight:700;">{status_counts["accepted"]}</div></div>'
-        f'<div style="padding:10px 12px;border-radius:14px;background:{"rgba(255,255,255,0.06)" if is_dark else "rgba(255,255,255,0.7)"};border:1px solid {shell_border};">'
+        f'<div style="padding:10px 12px;border-radius:14px;background:var(--ml-shell-surface);border:1px solid {shell_border};">'
         f'<div style="font-size:0.72rem;color:{shell_muted};">待处理</div><div style="font-size:1.08rem;color:{shell_text};font-weight:700;">{status_counts["pending"]}</div></div>'
         f'</div></div>'
         f'<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">'
-        f'<span style="padding:6px 12px;border-radius:999px;background:{"rgba(191,98,90,0.14)" if is_dark else "rgba(196,101,94,0.10)"};color:{"#f0a49d" if is_dark else "#a14b46"};border:1px solid {"rgba(191,98,90,0.26)" if is_dark else "rgba(196,101,94,0.16)"};font-size:0.8rem;font-weight:600;">高风险 {level_counts["高风险"]}</span>'
-        f'<span style="padding:6px 12px;border-radius:999px;background:{"rgba(212,176,74,0.14)" if is_dark else "rgba(212,168,74,0.10)"};color:{"#e7cc85" if is_dark else "#9b7730"};border:1px solid {"rgba(212,176,74,0.24)" if is_dark else "rgba(212,168,74,0.16)"};font-size:0.8rem;font-weight:600;">中风险 {level_counts["中风险"]}</span>'
-        f'<span style="padding:6px 12px;border-radius:999px;background:{"rgba(122,158,196,0.16)" if is_dark else "rgba(122,158,196,0.10)"};color:{"#9dc0e1" if is_dark else "#44648b"};border:1px solid {"rgba(122,158,196,0.25)" if is_dark else "rgba(122,158,196,0.16)"};font-size:0.8rem;font-weight:600;">低风险 {level_counts["低风险"]}</span>'
-        f'<span style="padding:6px 12px;border-radius:999px;background:{"rgba(255,255,255,0.06)" if is_dark else "rgba(255,255,255,0.7)"};color:{shell_muted};border:1px solid {shell_border};font-size:0.8rem;font-weight:600;">说明性意见 {status_counts["info_only"]}</span>'
+        f'<span style="padding:6px 12px;border-radius:999px;background:rgba(191,98,90,0.14);color:#cf635c;border:1px solid rgba(196,101,94,0.18);font-size:0.8rem;font-weight:600;">高风险 {level_counts["高风险"]}</span>'
+        f'<span style="padding:6px 12px;border-radius:999px;background:rgba(212,176,74,0.14);color:#b88731;border:1px solid rgba(212,168,74,0.18);font-size:0.8rem;font-weight:600;">中风险 {level_counts["中风险"]}</span>'
+        f'<span style="padding:6px 12px;border-radius:999px;background:rgba(122,158,196,0.16);color:#6282a7;border:1px solid rgba(122,158,196,0.18);font-size:0.8rem;font-weight:600;">低风险 {level_counts["低风险"]}</span>'
+        f'<span style="padding:6px 12px;border-radius:999px;background:var(--ml-shell-surface);color:{shell_text};border:1px solid {shell_border};font-size:0.8rem;font-weight:600;">待复核 {status_counts["review_later"]}</span>'
+        f'<span style="padding:6px 12px;border-radius:999px;background:var(--ml-shell-surface);color:{shell_muted};border:1px solid {shell_border};font-size:0.8rem;font-weight:600;">说明性意见 {status_counts["info_only"]}</span>'
         f'</div></div>'
     )
     st.markdown(meta_html, unsafe_allow_html=True)
@@ -1280,7 +1334,7 @@ def _render_contract_canvas(theme_key: str, shell_bg: str, shell_border: str, sh
         unsafe_allow_html=True,
     )
     st.markdown(_legend_html(theme_key), unsafe_allow_html=True)
-    st.markdown(_legend_dimensions_html(), unsafe_allow_html=True)
+    st.markdown(_legend_dimensions_html(theme_key), unsafe_allow_html=True)
     st.markdown(hl_html, unsafe_allow_html=True)
 
 
@@ -1305,6 +1359,7 @@ def _render_change_review_panel(snap: dict, shell_bg: str, shell_border: str, sh
         f'<div style="font-family:Outfit,Noto Sans SC,sans-serif;font-size:0.82rem;color:{shell_muted};">已采纳 {len(applied_indices)} 条</div></div></div>',
         unsafe_allow_html=True,
     )
+    preview_card_bg = "var(--ml-shell-surface)"
     preview_rows = []
     for idx in applied_indices[:8]:
         if idx >= len(risks):
@@ -1312,7 +1367,7 @@ def _render_change_review_panel(snap: dict, shell_bg: str, shell_border: str, sh
         risk = risks[idx]
         state = get_risk_suggestion_state(risk)
         preview_rows.append(
-            f'<div style="padding:14px 16px;border-radius:16px;border:1px solid {shell_border};background:rgba(255,255,255,0.04);margin-top:10px;">'
+            f'<div style="padding:14px 16px;border-radius:16px;border:1px solid {shell_border};background:{preview_card_bg};margin-top:10px;">'
             f'<div style="font-family:Outfit,Noto Sans SC,sans-serif;font-size:0.8rem;color:{shell_muted};margin-bottom:6px;">风险点 {idx + 1}</div>'
             f'<div style="font-family:Outfit,Noto Sans SC,sans-serif;font-size:0.88rem;color:{shell_text};line-height:1.7;"><strong>原文：</strong>{html.escape((risk.get("original") or "")[:120])}</div>'
             f'<div style="font-family:Outfit,Noto Sans SC,sans-serif;font-size:0.88rem;color:{shell_text};line-height:1.7;margin-top:6px;"><strong>替换后：</strong>{html.escape((state["display"] or "")[:160])}</div>'
@@ -1325,6 +1380,7 @@ def _render_change_review_panel(snap: dict, shell_bg: str, shell_border: str, sh
 
 def _render_decision_panel(
     snap: dict,
+    theme_key: str,
     shell_bg: str,
     shell_border: str,
     shell_shadow: str,
@@ -1350,6 +1406,7 @@ def _render_decision_panel(
             title="将风险卡放入当前处理台",
             subtitle="这里会成为当前风险的决策与追问中心",
             min_height=200,
+            theme_key=theme_key,
             key="dropzone_large_workspace"
         )
         if focus_from_js_dz and isinstance(focus_from_js_dz, dict):
@@ -1370,6 +1427,8 @@ def _render_decision_panel(
     hist = st.session_state.risk_followup_chats.setdefault(focus_idx, [])
     state = get_risk_suggestion_state(risk)
     applied_set = st.session_state.get("applied_risks", set())
+    review_later_set = st.session_state.get("review_later_risks", set())
+    is_review_later = focus_idx in review_later_set
     st.markdown(f"**当前处理：** 风险点 {focus_idx + 1} · {risk.get('dimension', '')} · {risk.get('level', '')}")
     st.caption((risk.get("original", "") or "")[:180] + ("…" if len(risk.get("original", "") or "") > 180 else ""))
 
@@ -1377,6 +1436,7 @@ def _render_decision_panel(
         title="拖入新卡片可替换当前处理对象",
         subtitle="",
         min_height=52,
+        theme_key=theme_key,
         key="dropzone_mini_replace_workspace"
     )
     if mini_dz_val and isinstance(mini_dz_val, dict):
@@ -1387,13 +1447,47 @@ def _render_decision_panel(
             st.session_state.focus_risk_idx = new_idx
             st.rerun()
 
+    state_badges = []
+    applied_badge_bg = "rgba(184,148,95,0.14)"
+    applied_badge_border = "rgba(184,148,95,0.28)"
+    applied_badge_fg = "#b8945f"
+    review_badge_bg = "rgba(98,130,167,0.14)"
+    review_badge_border = "rgba(98,130,167,0.26)"
+    review_badge_fg = "#6282a7"
+    detail_panel_bg = "var(--ml-shell-surface-strong)"
+    detail_subpanel_bg = "var(--ml-shell-surface)"
+    chat_panel_bg = "var(--ml-shell-surface)"
+    if focus_idx in applied_set:
+        state_badges.append(
+            f'<span style="padding:4px 10px;border-radius:999px;background:{applied_badge_bg};'
+            f'border:1px solid {applied_badge_border};color:{applied_badge_fg};font-size:0.76rem;font-weight:600;">已采纳</span>'
+        )
+    if is_review_later:
+        state_badges.append(
+            f'<span style="padding:4px 10px;border-radius:999px;background:{review_badge_bg};'
+            f'border:1px solid {review_badge_border};color:{review_badge_fg};font-size:0.76rem;font-weight:600;">待复核</span>'
+        )
+    if not state_badges:
+        state_badges.append(
+            f'<span style="padding:4px 10px;border-radius:999px;background:{detail_panel_bg};'
+            f'border:1px solid {shell_border};color:{shell_muted};font-size:0.76rem;font-weight:600;">处理中</span>'
+        )
+
     info_box = (
-        f'<div style="padding:14px 14px 12px 14px;border-radius:16px;border:1px solid {shell_border};background:rgba(255,255,255,0.04);margin:10px 0 12px 0;">'
-        f'<div style="font-family:Outfit,Noto Sans SC,sans-serif;font-size:0.8rem;color:{shell_muted};margin-bottom:6px;">风险说明</div>'
-        f'<div style="font-family:Outfit,Noto Sans SC,sans-serif;font-size:0.9rem;color:{shell_text};line-height:1.75;">{html.escape(risk.get("issue", "无"))}</div>'
-        f'<div style="font-family:Outfit,Noto Sans SC,sans-serif;font-size:0.8rem;color:{shell_muted};margin:10px 0 6px 0;">建议条款</div>'
-        f'<div style="font-family:Outfit,Noto Sans SC,sans-serif;font-size:0.88rem;color:{shell_text};line-height:1.75;">{html.escape(str(state["display"]) or "无")}</div>'
+        f'<div style="padding:14px 14px 12px 14px;border-radius:16px;border:1px solid {shell_border};'
+        f'background:{detail_panel_bg};margin:10px 0 12px 0;">'
+        f'<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px;">'
+        f'<div style="font-family:Outfit,Noto Sans SC,sans-serif;font-size:0.8rem;color:{shell_muted} !important;">当前风险摘要</div>'
+        f'<div style="display:flex;gap:6px;flex-wrap:wrap;">{"".join(state_badges)}</div></div>'
+        f'<div style="display:grid;gap:10px;">'
+        f'<div style="padding:10px 12px;border-radius:12px;background:{detail_subpanel_bg};max-height:124px;overflow:auto;">'
+        f'<div style="font-family:Outfit,Noto Sans SC,sans-serif;font-size:0.76rem;color:{shell_muted} !important;margin-bottom:4px;">风险说明</div>'
+        f'<div style="font-family:Outfit,Noto Sans SC,sans-serif;font-size:0.88rem;color:{shell_text} !important;line-height:1.72;">{html.escape(risk.get("issue", "无"))}</div>'
         f'</div>'
+        f'<div style="padding:10px 12px;border-radius:12px;background:{detail_subpanel_bg};max-height:124px;overflow:auto;">'
+        f'<div style="font-family:Outfit,Noto Sans SC,sans-serif;font-size:0.76rem;color:{shell_muted} !important;margin-bottom:4px;">建议条款</div>'
+        f'<div style="font-family:Outfit,Noto Sans SC,sans-serif;font-size:0.86rem;color:{shell_text} !important;line-height:1.72;">{html.escape(str(state["display"]) or "无")}</div>'
+        f'</div></div></div>'
     )
     st.markdown(info_box, unsafe_allow_html=True)
 
@@ -1406,12 +1500,23 @@ def _render_decision_panel(
             label = "采纳到正文" if focus_idx not in applied_set else "撤销采纳"
             if st.button(label, key=f"apply_risk_workspace_{focus_idx}", use_container_width=True, type="primary" if focus_idx not in applied_set else "secondary"):
                 _toggle_applied_risk(focus_idx)
+                st.session_state["workspace_notice"] = (
+                    f"风险点 {focus_idx + 1} 已采纳到正文。" if focus_idx not in applied_set else f"风险点 {focus_idx + 1} 已撤销采纳。"
+                )
                 st.rerun()
         elif state["has_display"]:
             st.button("仅说明性意见", key=f"apply_risk_disabled_workspace_{focus_idx}", use_container_width=True, disabled=True)
     with action_col2:
-        if st.button("标记待复核", key=f"review_later_workspace_{focus_idx}", use_container_width=True):
+        review_label = "取消待复核" if is_review_later else "标记待复核"
+        if st.button(review_label, key=f"review_later_workspace_{focus_idx}", use_container_width=True):
+            marked = _toggle_review_later_risk(focus_idx)
+            st.session_state["workspace_notice"] = (
+                f"风险点 {focus_idx + 1} 已标记为待复核。"
+                if marked
+                else f"风险点 {focus_idx + 1} 已取消待复核。"
+            )
             st.session_state.focus_risk_idx = focus_idx
+            st.rerun()
     with action_col3:
         if st.button("清除当前对象", key="clear_focus_risk_workspace", use_container_width=True):
             st.session_state.focus_risk_idx = None
@@ -1419,20 +1524,32 @@ def _render_decision_panel(
 
     if st.button("清空当前风险对话", key="risk_chat_clear_focus_workspace", use_container_width=True):
         st.session_state.risk_followup_chats[focus_idx] = []
+        st.session_state["workspace_notice"] = f"风险点 {focus_idx + 1} 的追问记录已清空。"
         st.rerun()
+
+    st.markdown(
+        f'<div style="padding:10px 12px;border-radius:14px;border:1px solid {shell_border};'
+        f'background:{chat_panel_bg};margin:12px 0 8px 0;">'
+        f'<div style="font-family:Outfit,Noto Sans SC,sans-serif;font-size:0.8rem;color:{shell_muted} !important;margin-bottom:8px;">追问结果</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+    chat_container = st.container(height=220 if hist else 116)
+    if hist:
+        for m in hist:
+            with chat_container.chat_message(m["role"]):
+                st.markdown(m["content"])
+    else:
+        with chat_container:
+            st.caption("这里会保留围绕当前风险的问答记录，这样你在看回复时不需要离开当前风险摘要。")
 
     with st.form(key="risk_followup_form_focus_workspace", clear_on_submit=True):
         q = st.text_area(
             "围绕当前风险继续追问",
-            height=88,
+            height=92,
             placeholder="例如：若对方拒绝该修改，我方还能保留哪些权利？请给更稳妥的替代表述。",
         )
         submitted = st.form_submit_button("发送给 AI", type="primary", use_container_width=True)
-
-    chat_container = st.container(height=360)
-    for m in hist:
-        with chat_container.chat_message(m["role"]):
-            st.markdown(m["content"])
 
     if submitted and (q or "").strip():
         provider_choice = st.session_state.get("ai_provider_radio", "OpenAI")
@@ -1467,6 +1584,7 @@ def _render_decision_panel(
                     hist.append({"role": "user", "content": q.strip()})
                     hist.append({"role": "assistant", "content": reply})
                     st.session_state.risk_followup_chats[focus_idx] = hist
+                    st.session_state["workspace_notice"] = f"风险点 {focus_idx + 1} 的追问结果已更新。"
                     st.rerun()
                 except Exception as e:
                     st.error(str(e))
@@ -1510,42 +1628,34 @@ def _render_overview_panel(snap: dict) -> None:
     mid = sum(1 for r in risks if r.get("level") == "中风险")
     low = sum(1 for r in risks if r.get("level") == "低风险")
 
-    theme_choice = st.session_state.get("ui_theme", "跟随系统")
-    tk = THEME_MAP.get(theme_choice, "system")
-    pal = _panel_palette(tk)
-    is_dark = tk == "dark"
-    gold = "#d4b070" if is_dark else "#b8945f"
-    text_fg = pal["panel_fg"]
-    header_bg = (
-        "linear-gradient(145deg, rgba(36,41,55,0.96) 0%, rgba(28,33,44,0.96) 100%)"
-        if is_dark
-        else "linear-gradient(145deg, rgba(255,252,246,0.98) 0%, rgba(241,233,219,0.98) 100%)"
-    )
-    header_border = "#40475b" if is_dark else "#e6ddcf"
-    header_title = "#f2ede6" if is_dark else "#182031"
-    header_meta = "rgba(242,237,230,0.72)" if is_dark else "#72695f"
-    info_bg = "rgba(255,255,255,0.05)" if is_dark else "rgba(255,253,249,0.8)"
-    info_border = "#3a4153" if is_dark else "#e8dfd2"
-    accent_bg = "rgba(212,176,112,0.08)" if is_dark else "rgba(184,148,95,0.07)"
-    accent_border = "#524838" if is_dark else "#eadfcd"
-    block_shadow = "0 14px 30px rgba(10,12,18,0.16)" if is_dark else "0 12px 24px rgba(26,31,46,0.05)"
-    header_shadow = "0 18px 42px rgba(8,12,22,0.20)" if is_dark else "0 16px 34px rgba(26,31,46,0.08)"
-    divider_color = "rgba(212,176,112,0.18)" if is_dark else "rgba(184,148,95,0.16)"
+    gold = "var(--ml-accent-gold)"
+    text_fg = "var(--ml-shell-text)"
+    header_bg = "linear-gradient(145deg, var(--ml-shell-surface-strong) 0%, var(--ml-shell-surface) 100%)"
+    header_border = "var(--ml-shell-border)"
+    header_title = "var(--ml-shell-text)"
+    header_meta = "var(--ml-shell-muted)"
+    info_bg = "var(--ml-shell-surface)"
+    info_border = "var(--ml-shell-border)"
+    accent_bg = "var(--ml-shell-surface)"
+    accent_border = "var(--ml-shell-border)"
+    block_shadow = "0 12px 24px rgba(0,0,0,0.08)"
+    header_shadow = "0 16px 34px rgba(0,0,0,0.12)"
+    divider_color = "var(--ml-shell-border)"
     badge_styles = {
         "高风险": (
-            "rgba(191,98,90,0.16)" if is_dark else "rgba(196,101,94,0.10)",
-            "#f0a49d" if is_dark else "#a14b46",
-            "rgba(191,98,90,0.30)" if is_dark else "rgba(196,101,94,0.18)",
+            "rgba(191,98,90,0.14)",
+            "#cf635c",
+            "rgba(196,101,94,0.18)",
         ),
         "中风险": (
-            "rgba(212,176,74,0.16)" if is_dark else "rgba(212,168,74,0.10)",
-            "#e7cc85" if is_dark else "#9b7730",
-            "rgba(212,176,74,0.28)" if is_dark else "rgba(212,168,74,0.18)",
+            "rgba(212,176,74,0.14)",
+            "#b88731",
+            "rgba(212,168,74,0.18)",
         ),
         "低风险": (
-            "rgba(122,158,196,0.18)" if is_dark else "rgba(122,158,196,0.10)",
-            "#9dc0e1" if is_dark else "#44648b",
-            "rgba(122,158,196,0.30)" if is_dark else "rgba(122,158,196,0.18)",
+            "rgba(122,158,196,0.16)",
+            "#6282a7",
+            "rgba(122,158,196,0.18)",
         ),
     }
 
@@ -1565,28 +1675,35 @@ def _render_overview_panel(snap: dict) -> None:
             f'background:{bg};color:{fg};border:1px solid {border};">{label} {count}</span>'
         )
 
+    status_counts = _count_review_statuses(
+        risks,
+        st.session_state.get("applied_risks", set()),
+        st.session_state.get("review_later_risks", set()),
+    )
+
     st.markdown(
-        f'<div style="padding:24px 26px 20px 26px;border-radius:24px;font-family:Outfit,Noto Sans SC,sans-serif;'
-        f'background:{header_bg};border:1px solid {header_border};margin-bottom:16px;position:relative;overflow:hidden;'
+        f'<div style="padding:18px 20px 16px 20px;border-radius:22px;font-family:Outfit,Noto Sans SC,sans-serif;'
+        f'background:{header_bg};border:1px solid {header_border};margin-bottom:14px;position:relative;overflow:hidden;'
         f'box-shadow:{header_shadow};">'
-        f'<div style="position:absolute;inset:auto -46px -56px auto;width:180px;height:180px;border-radius:50%;'
+        f'<div style="position:absolute;inset:auto -40px -50px auto;width:148px;height:148px;border-radius:50%;'
         f'background:rgba(184,148,95,0.08);"></div>'
         f'<div style="position:absolute;top:0;left:0;right:0;height:5px;'
         f'background:linear-gradient(90deg, {gold}, rgba(44,62,107,0.14));"></div>'
         f'<div style="position:relative;z-index:1;">'
         f'<div style="display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap;align-items:flex-start;">'
         f'<div>'
-        f'<div style="font-size:0.73rem;color:{gold};font-weight:700;letter-spacing:0.16em;text-transform:uppercase;">AI 审查报告</div>'
-        f'<div style="font-family:Cormorant Garamond,Noto Serif SC,serif;font-size:1.6rem;font-weight:700;'
-        f'color:{header_title};margin-top:6px;letter-spacing:0.01em;">{html.escape(ct)}</div>'
+        f'<div style="font-size:0.71rem;color:{gold};font-weight:700;letter-spacing:0.14em;text-transform:uppercase;">AI 审查报告</div>'
+        f'<div style="font-family:Cormorant Garamond,Noto Serif SC,serif;font-size:1.38rem;font-weight:700;'
+        f'color:{header_title};margin-top:4px;letter-spacing:0.01em;">{html.escape(ct)}</div>'
         f'{template_html}'
         f'</div>'
-        f'<div style="max-width:340px;font-size:0.86rem;line-height:1.7;color:{header_meta};">'
+        f'<div style="max-width:280px;font-size:0.82rem;line-height:1.62;color:{header_meta};">'
         f'查看合同概览、风险分布与导出入口。'
         f'</div>'
         f'</div>'
-        f'<div style="height:1px;background:{divider_color};margin:16px 0 14px 0;"></div>'
-        f'<div style="display:flex;gap:10px;flex-wrap:wrap;">{"".join(badge_html)}</div>'
+        f'<div style="height:1px;background:{divider_color};margin:12px 0 12px 0;"></div>'
+        f'<div style="display:flex;gap:8px;flex-wrap:wrap;">{"".join(badge_html)}</div>'
+        f'<div style="margin-top:10px;font-size:0.8rem;color:{header_meta};">待处理 {status_counts["pending"]} · 待复核 {status_counts["review_later"]} · 已采纳 {status_counts["accepted"]}</div>'
         f'</div></div>',
         unsafe_allow_html=True,
     )
@@ -1604,12 +1721,12 @@ def _render_overview_panel(snap: dict) -> None:
         for i, (label, value) in enumerate(info_items):
             with cols[i % 2]:
                 st.markdown(
-                    f'<div style="padding:14px 16px;border-radius:18px;margin-bottom:10px;'
+                    f'<div style="padding:12px 14px;border-radius:16px;margin-bottom:8px;'
                     f'font-family:Outfit,Noto Sans SC,sans-serif;background:{info_bg};'
                     f'border:1px solid {info_border};box-shadow:{block_shadow};">'
                     f'<div style="font-size:0.72rem;color:{gold};font-weight:700;margin-bottom:6px;'
                     f'letter-spacing:0.12em;text-transform:uppercase;">{label}</div>'
-                    f'<div style="font-size:0.92rem;color:{text_fg};line-height:1.65;font-weight:400;">'
+                    f'<div style="font-size:0.88rem;color:{text_fg};line-height:1.58;font-weight:400;">'
                     f'{html.escape(str(value))}</div></div>',
                     unsafe_allow_html=True,
                 )
@@ -1617,41 +1734,44 @@ def _render_overview_panel(snap: dict) -> None:
         summary = (ov.get("summary") or "").strip()
         if summary:
             st.markdown(
-                f'<div style="padding:14px 18px;border-radius:18px;margin-top:2px;'
+                f'<div style="padding:12px 16px;border-radius:16px;margin-top:2px;'
                 f'font-family:Outfit,Noto Sans SC,sans-serif;background:{info_bg};'
                 f'border:1px solid {info_border};box-shadow:{block_shadow};">'
                 f'<div style="font-size:0.72rem;color:{gold};font-weight:700;margin-bottom:7px;'
                 f'letter-spacing:0.12em;text-transform:uppercase;">内容概览</div>'
-                f'<div style="font-size:0.92rem;color:{text_fg};line-height:1.75;">{html.escape(summary)}</div>'
+                f'<div style="font-size:0.88rem;color:{text_fg};line-height:1.65;">{html.escape(summary)}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
 
     if risks:
-        level_colors = {"高风险": "#c4655e", "中风险": "#b88a33", "低风险": "#5b7ea6"}
-        if is_dark:
-            level_colors = {"高风险": "#f0a49d", "中风险": "#e7cc85", "低风险": "#9dc0e1"}
+        level_colors = {"高风险": "#cf635c", "中风险": "#b88731", "低风险": "#6282a7"}
         notable = sorted(
             risks,
             key=lambda r: {"高风险": 0, "中风险": 1, "低风险": 2}.get(r.get("level", "低风险"), 2),
         )[:3]
+        summary_item_bg = "var(--ml-shell-surface-soft)"
         items_html = "".join(
-            f'<li style="margin-bottom:8px;line-height:1.62;">'
-            f'<span style="color:{level_colors.get(r.get("level","低风险"), text_fg)};font-weight:700;'
-            f'font-size:0.8rem;">{html.escape(r.get("level", ""))}</span> '
-            f'<span style="color:{text_fg};">'
+            f'<div style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:12px;'
+            f'background:{summary_item_bg};border:1px solid {accent_border};">'
+            f'<span style="width:8px;height:8px;margin-top:8px;border-radius:50%;display:inline-block;flex-shrink:0;'
+            f'background:{level_colors.get(r.get("level","低风险"), text_fg)};"></span>'
+            f'<div style="flex:1;min-width:0;">'
+            f'<div style="color:{level_colors.get(r.get("level","低风险"), text_fg)} !important;font-weight:700;'
+            f'font-size:0.8rem;line-height:1.4;margin-bottom:3px;">{html.escape(r.get("level", ""))}</div>'
+            f'<div style="color:{text_fg} !important;font-size:0.88rem;line-height:1.62;">'
             f'{html.escape((r.get("issue") or "")[:90] + ("…" if len(r.get("issue", "")) > 90 else ""))}'
-            f'</span></li>'
+            f'</div></div></div>'
             for r in notable
         )
         st.markdown(
-            f'<div style="padding:15px 18px;border-radius:18px;margin-top:10px;'
+            f'<div style="padding:12px 15px;border-radius:16px;margin-top:8px;'
             f'font-family:Outfit,Noto Sans SC,sans-serif;background:{accent_bg};'
             f'border:1px solid {accent_border};box-shadow:{block_shadow};">'
             f'<div style="font-size:0.72rem;color:{gold};font-weight:700;margin-bottom:8px;'
             f'letter-spacing:0.12em;text-transform:uppercase;">重点风险摘要</div>'
-            f'<ul style="margin:0;padding-left:18px;font-size:0.88rem;color:{text_fg};">'
-            f'{items_html}</ul></div>',
+            f'<div style="display:grid;gap:10px;color:{text_fg} !important;">'
+            f'{items_html}</div></div>',
             unsafe_allow_html=True,
         )
 
@@ -1801,131 +1921,160 @@ with tab_review:
     )
     col1, col2 = st.columns([1.02, 0.98], gap="large")
 
+    review_templates = _get_review_templates()
+    template_option_ids = ["auto"] + [template["id"] for template in review_templates]
+
     with col1:
-        st.markdown(
-            """
-            <div class="report-shell" style="margin-bottom:14px;">
-              <div style="font-family:var(--ml-font-display);font-size:1.38rem;font-weight:700;color:var(--ml-text-primary);">输入合同</div>
-              <div style="font-family:var(--ml-font-body);font-size:0.86rem;color:#7b746b;line-height:1.75;margin-top:6px;max-width:36rem;">
-                支持 Word、PDF、图片扫描件和直接粘贴文本。适合在同一界面中完成审查、核对和导出。
-              </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        uploaded_file = st.file_uploader(
-            "拖拽文件到此或点击上传 (支持 .docx, .pdf, .png, .jpg, .jpeg)",
-            type=["docx", "pdf", "png", "jpg", "jpeg"],
-        )
-        current_upload_id = None
-        if uploaded_file is not None:
-            current_upload_id = (
-                uploaded_file.name,
-                uploaded_file.size,
-                getattr(uploaded_file, "type", ""),
+        with st.container(border=True):
+            st.markdown('<div class="home-card-title">输入合同</div>', unsafe_allow_html=True)
+            st.markdown(
+                '<div class="home-card-copy">选择一种输入方式即可。上传文件适合 Word / PDF / 图片扫描件，粘贴文本适合已经拿到纯文本的合同内容。</div>',
+                unsafe_allow_html=True,
             )
-            if st.session_state.get("last_uploaded_file_id") != current_upload_id:
-                st.session_state["last_uploaded_file_id"] = current_upload_id
-        ocr_status = get_paddle_ocr_status()
-        if ocr_status["ready"]:
-            st.caption(f"OCR 状态：已初始化，可识别扫描件。模型缓存目录：{ocr_status['cache_dir']}")
-        else:
-            st.warning(
-                f"OCR 状态：未初始化。若需识别扫描 PDF 或图片，请先运行 `{get_ocr_init_command()}`。"
+            input_mode = st.radio(
+                "输入方式",
+                ["上传合同文件", "直接粘贴文本"],
+                horizontal=True,
+                key="contract_input_mode",
             )
-        st.markdown("或者：")
-        contract_text = st.text_area(
-            "直接粘贴合同文本：",
-            height=220,
-            placeholder="在此输入需要审查的合同内容...",
-            key="contract_input",
-        )
-        
-        st.markdown("---")
-        st.radio(
-            "审校深度",
-            ["快速审查", "标准审查", "深度审查"],
-            captions=["约 30s, 关注...", "约 1-2min, 四..", "约 3-5min, 逐.."],
-            horizontal=True,
-            key="review_depth",
-            index=1,
-        )
-        st.radio(
-            "审校立场",
-            ["中立视角", "委托方视角", "相对方视角"],
-            horizontal=True,
-            key="review_perspective",
-            index=0,
-        )
-        review_templates = _get_review_templates()
-        template_option_ids = ["auto"] + [template["id"] for template in review_templates]
-        st.selectbox(
-            "审校模板",
-            options=template_option_ids,
-            key="selected_review_template_id",
-            on_change=save_settings,
-            help="模板会把专项审校重点附加到本次审查提示词中。",
-            format_func=lambda template_id: (
-                "自动识别（使用通用四维策略）"
-                if template_id == "auto"
-                else format_template_option_label(
-                    get_review_template_by_id(review_templates, template_id) or {"name": template_id}
+
+            uploaded_file = None
+            current_upload_id = None
+            contract_text = ""
+            if input_mode == "上传合同文件":
+                st.markdown('<div class="home-section-label">上传文件</div>', unsafe_allow_html=True)
+                uploaded_file = st.file_uploader(
+                    "拖拽文件到此或点击上传 (支持 .docx, .pdf, .png, .jpg, .jpeg)",
+                    type=["docx", "pdf", "png", "jpg", "jpeg"],
+                    label_visibility="collapsed",
                 )
-            ),
-        )
-        selected_template = get_review_template_by_id(
-            review_templates,
-            st.session_state.get("selected_review_template_id", "auto"),
-        )
-        if selected_template:
-            template_scope = CONTRACT_TYPE_LABELS.get(
-                selected_template.get("bound_contract_type") or "",
-                "不限定合同类型",
-            )
-            st.caption(f"当前模板：{selected_template['name']} · {template_scope}")
-            with st.expander("查看模板重点", expanded=False):
-                if selected_template.get("prompt"):
-                    st.markdown(selected_template["prompt"].replace("\n", "  \n"))
+                st.caption("支持 .docx、.pdf、.png、.jpg、.jpeg")
+
+                if uploaded_file is not None:
+                    current_upload_id = (
+                        uploaded_file.name,
+                        uploaded_file.size,
+                        getattr(uploaded_file, "type", ""),
+                    )
+                    if st.session_state.get("last_uploaded_file_id") != current_upload_id:
+                        st.session_state["last_uploaded_file_id"] = current_upload_id
+
+                ocr_status = get_paddle_ocr_status()
+                if ocr_status["ready"]:
+                    st.caption(f"OCR 状态：已初始化，可识别扫描件。模型缓存目录：{ocr_status['cache_dir']}")
                 else:
-                    st.caption("当前模板未设置额外专项审校重点，将沿用基础四维审查框架。")
-        st.markdown("<br>", unsafe_allow_html=True)
-        analyze_button = st.button("开始审查", type="primary", use_container_width=True)
-
-    with col2:
-        st.markdown(
-            """
-            <div class="report-shell">
-              <div style="font-family:var(--ml-font-display);font-size:1.38rem;font-weight:700;color:var(--ml-text-primary);">审查结果</div>
-              <div style="font-family:var(--ml-font-body);font-size:0.86rem;color:#7b746b;line-height:1.75;margin-top:6px;max-width:34rem;">
-                用于查看合同概览、导出分析报告，以及进入下方的逐条处理区域。
-              </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        if not analyze_button:
-            snap_preview = st.session_state.get("review_snapshot")
-            if snap_preview and snap_preview.get("contract_type"):
-                _render_overview_panel(snap_preview)
-                if snap_preview.get("risks"):
-                    import datetime as _dt
-                    _fname = f"合同审查报告_{_dt.datetime.now().strftime('%Y%m%d_%H%M')}.html"
-                    st.download_button(
-                        "导出分析报告 (HTML)",
-                        data=build_export_report_html(snap_preview).encode("utf-8"),
-                        file_name=_fname,
-                        mime="text/html",
-                        use_container_width=True,
-                        key="export_btn_top",
+                    st.warning(
+                        f"OCR 状态：未初始化。若需识别扫描 PDF 或图片，请先运行 `{get_ocr_init_command()}`。"
                     )
             else:
-                st.info("\u8bf7\u914d\u7f6e API Key\uff0c\u5728\u5de6\u4fa7\u8f93\u5165\u5408\u540c\u5185\u5bb9\u5e76\u70b9\u51fb\u5f00\u59cb\u5ba1\u67e5\u3002")
+                st.markdown('<div class="home-section-label">粘贴文本</div>', unsafe_allow_html=True)
+                contract_text = st.text_area(
+                    "直接粘贴合同文本：",
+                    height=260,
+                    placeholder="在此输入需要审查的合同内容...",
+                    key="contract_input",
+                    label_visibility="collapsed",
+                )
+
+            st.markdown('<div class="home-section-label">审查参数</div>', unsafe_allow_html=True)
+            st.radio(
+                "审校深度",
+                ["快速审查", "标准审查", "深度审查"],
+                captions=["约 30s, 聚焦核心风险", "约 1-2min, 适合大多数合同", "约 3-5min, 更细的逐条审查"],
+                horizontal=True,
+                key="review_depth",
+                index=1,
+            )
+            st.radio(
+                "审校立场",
+                ["中立视角", "委托方视角", "相对方视角"],
+                horizontal=True,
+                key="review_perspective",
+                index=0,
+            )
+            st.selectbox(
+                "审校模板",
+                options=template_option_ids,
+                key="selected_review_template_id",
+                on_change=save_settings,
+                help="模板会把专项审校重点附加到本次审查提示词中。",
+                format_func=lambda template_id: (
+                    "自动识别（使用通用四维策略）"
+                    if template_id == "auto"
+                    else format_template_option_label(
+                        get_review_template_by_id(review_templates, template_id) or {"name": template_id}
+                    )
+                ),
+            )
+            selected_template = get_review_template_by_id(
+                review_templates,
+                st.session_state.get("selected_review_template_id", "auto"),
+            )
+            if selected_template:
+                template_scope = CONTRACT_TYPE_LABELS.get(
+                    selected_template.get("bound_contract_type") or "",
+                    "不限定合同类型",
+                )
+                st.caption(f"当前模板：{selected_template['name']} · {template_scope}")
+                with st.expander("查看模板重点", expanded=False):
+                    if selected_template.get("prompt"):
+                        st.markdown(selected_template["prompt"].replace("\n", "  \n"))
+                    else:
+                        st.caption("当前模板未设置额外专项审校重点，将沿用基础四维审查框架。")
+            analyze_button = st.button("开始审查", type="primary", use_container_width=True)
+
+    with col2:
+        with st.container(border=True):
+            st.markdown('<div class="home-card-title">审查结果</div>', unsafe_allow_html=True)
+            st.markdown(
+                '<div class="home-card-copy">这里展示本次审查的提示摘要，以及审查完成后的合同概览、风险分布和导出入口。</div>',
+                unsafe_allow_html=True,
+            )
+
+            template_display = selected_template["name"] if selected_template else "自动识别（通用四维策略）"
+            prompt_preview = (
+                (selected_template.get("prompt") or "").strip()
+                if selected_template
+                else "将使用基础四维审查策略，围绕法律合规、风险防控、条款完善和利益保护展开审查。"
+            )
+            if len(prompt_preview) > 180:
+                prompt_preview = prompt_preview[:180] + "…"
+
+            st.markdown(
+                f'<div class="home-section-label">本次审查提示</div>'
+                f'<div class="home-note">将沿用左侧当前 AI 配置与参数执行本次审查。'
+                f'当前模板：{html.escape(template_display)}。'
+                f'<br><br>{html.escape(prompt_preview)}</div>',
+                unsafe_allow_html=True,
+            )
+
+            if not analyze_button:
+                snap_preview = st.session_state.get("review_snapshot")
+                if snap_preview and snap_preview.get("contract_type"):
+                    st.markdown('<div class="home-section-label">最近一次审查结果</div>', unsafe_allow_html=True)
+                    _render_overview_panel(snap_preview)
+                    if snap_preview.get("risks"):
+                        import datetime as _dt
+                        _fname = f"合同审查报告_{_dt.datetime.now().strftime('%Y%m%d_%H%M')}.html"
+                        st.download_button(
+                            "导出分析报告 (HTML)",
+                            data=build_export_report_html(snap_preview).encode("utf-8"),
+                            file_name=_fname,
+                            mime="text/html",
+                            use_container_width=True,
+                            key="export_btn_top",
+                        )
+                else:
+                    st.markdown(
+                        '<div class="home-placeholder">配置好左侧内容后点击“开始审查”，这里会直接展示合同概览、风险分布和导出入口，不再单独占一块空白区域。</div>',
+                        unsafe_allow_html=True,
+                    )
 
     if analyze_button:
             provider_choice = st.session_state.get("ai_provider_radio", "OpenAI")
             depth_choice = st.session_state.get("review_depth", "标准审查")
             persp_choice = st.session_state.get("review_perspective", "中立视角")
+            input_mode = st.session_state.get("contract_input_mode", "上传合同文件")
             selected_template = get_review_template_by_id(
                 _get_review_templates(),
                 st.session_state.get("selected_review_template_id", "auto"),
@@ -1935,12 +2084,14 @@ with tab_review:
                 st.error("请先在左侧边栏输入 OpenAI API Key！")
             elif provider_choice == "Anthropic" and not st.session_state.get("anthropic_api_key"):
                 st.error("请先在左侧边栏输入 Anthropic API Key！")
-            elif not uploaded_file and not contract_text.strip():
-                st.warning("请先提供需要审查的合同内容！")
+            elif input_mode == "上传合同文件" and not uploaded_file:
+                st.warning("请先上传需要审查的合同文件！")
+            elif input_mode == "直接粘贴文本" and not contract_text.strip():
+                st.warning("请先粘贴需要审查的合同内容！")
             else:
                 final_text = ""
                 try:
-                    if uploaded_file:
+                    if input_mode == "上传合同文件" and uploaded_file:
                         file_suffix = Path(uploaded_file.name).suffix.lower()
                         parse_message = "正在解析上传文件..."
                         if file_suffix in {".pdf", ".png", ".jpg", ".jpeg"}:
@@ -1951,7 +2102,7 @@ with tab_review:
                             st.session_state.original_file_bytes = file_bytes
                             st.session_state.original_file_name = uploaded_file.name
                     else:
-                        final_text = contract_text
+                        final_text = contract_text.strip()
                         st.session_state.original_file_bytes = None
                         st.session_state.original_file_name = None
                 except Exception as e:
@@ -2026,6 +2177,8 @@ with tab_review:
                             st.session_state.review_snapshot = snapshot
                             st.session_state.risk_followup_chats = {}
                             st.session_state.focus_risk_idx = None
+                            st.session_state.review_later_risks = set()
+                            st.session_state.workspace_notice = None
 
                             if not risks:
                                 st.success("✅ 审查完成！未发现明显法律风险。")
@@ -2043,15 +2196,12 @@ with tab_review:
 
     snap = st.session_state.review_snapshot
     if snap and snap.get("risks"):
-        theme_choice = st.session_state.get("ui_theme", "跟随系统")
-        theme_key = THEME_MAP.get(theme_choice, "system")
-        pal = _panel_palette(theme_key)
-        is_dark = theme_key == "dark"
-        shell_bg = "rgba(21, 27, 39, 0.90)" if is_dark else "rgba(255, 251, 245, 0.84)"
-        shell_border = "#343c4f" if is_dark else "#ddd2c1"
-        shell_shadow = "0 18px 42px rgba(8,12,22,0.24)" if is_dark else "0 18px 36px rgba(26,31,46,0.07)"
-        shell_text = pal["panel_fg"]
-        shell_muted = pal["muted"]
+        theme_key = _active_theme_key()
+        shell_bg = "var(--ml-shell-surface-strong)"
+        shell_border = "var(--ml-shell-border)"
+        shell_shadow = "0 18px 36px rgba(0,0,0,0.12)"
+        shell_text = "var(--ml-shell-text)"
+        shell_muted = "var(--ml-shell-muted)"
 
         st.divider()
         st.markdown(
@@ -2066,6 +2216,9 @@ with tab_review:
         )
 
         _render_workspace_header(snap, theme_key, shell_bg, shell_border, shell_shadow, shell_text, shell_muted)
+        workspace_notice = st.session_state.pop("workspace_notice", None)
+        if workspace_notice:
+            st.success(workspace_notice)
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
         action_col1, action_col2, action_col3 = st.columns([1.0, 1.0, 1.0], gap="medium")
@@ -2076,6 +2229,8 @@ with tab_review:
                 actionable_indices = get_actionable_risk_indices(snap["risks"])
                 if actionable_indices:
                     st.session_state.applied_risks.update(actionable_indices)
+                    st.session_state.review_later_risks.difference_update(actionable_indices)
+                    st.session_state.workspace_notice = f"已批量采纳 {len(actionable_indices)} 条可替换建议。"
                     st.session_state.show_export_dialog = True
                     st.rerun()
                 else:
@@ -2100,7 +2255,7 @@ with tab_review:
         with status_col:
             status_filter = st.selectbox(
                 "处理状态",
-                ["全部", "待处理", "已采纳", "仅说明性意见"],
+                ["全部", "待处理", "待复核", "已采纳", "仅说明性意见"],
                 index=1 if only_pending else 0,
                 key="risk_status_filter_workspace",
             )
@@ -2118,11 +2273,16 @@ with tab_review:
             sort_order,
             "待处理" if only_pending and status_filter == "全部" else status_filter,
         )
-        deck_html = build_risk_deck_html(risks_with_idx, theme_key, st.session_state.get("applied_risks", set()))
+        deck_html = build_risk_deck_html(
+            risks_with_idx,
+            theme_key,
+            st.session_state.get("applied_risks", set()),
+            st.session_state.get("review_later_risks", set()),
+        )
         applied = st.session_state.get("applied_risks", set())
         hl_html, _ = get_highlighted_contract_html(snap["text"], snap["risks"], theme_key, applied)
 
-        c1, c2, c3 = st.columns([1.0, 1.64, 1.06], gap="large")
+        c1, c2, c3 = st.columns([0.92, 1.46, 1.34], gap="large")
 
         with c1:
             st.markdown(
@@ -2135,7 +2295,7 @@ with tab_review:
                 f'</div>',
                 unsafe_allow_html=True,
             )
-            focus_from_js_deck = risk_deck_component(cards_html=deck_html, key="risk_deck_v2")
+            focus_from_js_deck = risk_deck_component(cards_html=deck_html, theme_key=theme_key, key="risk_deck_v2")
             if focus_from_js_deck and isinstance(focus_from_js_deck, dict):
                 new_idx = int(focus_from_js_deck.get("idx", -1))
                 new_ts = focus_from_js_deck.get("ts", 0)
@@ -2153,7 +2313,7 @@ with tab_review:
             _render_contract_canvas(theme_key, shell_bg, shell_border, shell_shadow, shell_text, shell_muted, hl_html)
 
         with c3:
-            _render_decision_panel(snap, shell_bg, shell_border, shell_shadow, shell_text, shell_muted)
+            _render_decision_panel(snap, theme_key, shell_bg, shell_border, shell_shadow, shell_text, shell_muted)
 
         _render_change_review_panel(snap, shell_bg, shell_border, shell_shadow, shell_text, shell_muted)
 

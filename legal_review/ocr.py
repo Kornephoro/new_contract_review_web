@@ -8,15 +8,16 @@ import tempfile
 from functools import lru_cache
 from pathlib import Path
 
+from PIL import Image, ImageDraw
 
+# 2.x 环境下不再需要这些 hack
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"}
 os.environ["DISABLE_MODEL_SOURCE_CHECK"] = "True"
 os.environ["PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK"] = "True"
-os.environ.setdefault("PADDLE_PDX_MODEL_SOURCE", "BOS")
 PADDLE_MODEL_CACHE_DIR = Path(
     os.environ.get(
         "LEGAL_REVIEW_PADDLE_MODEL_DIR",
-        str(Path.home() / ".paddlex" / "official_models"),
+        str(Path.home() / ".paddleocr"), # 2.x 默认位置
     )
 ).expanduser()
 PADDLE_OCR_PROFILE = os.environ.get("LEGAL_REVIEW_PADDLE_PROFILE", "mobile").strip().lower() or "mobile"
@@ -27,9 +28,9 @@ REQUIRED_PYTHON_DISPLAY = "3.11+"
 PYTHON_313_COMMAND = "python"
 
 PADDLE_MODEL_NAMES = {
-    "doc_orientation": "PP-LCNet_x1_0_doc_ori",
-    "text_detection": "PP-OCRv5_mobile_det" if PADDLE_OCR_PROFILE == "mobile" else "PP-OCRv5_server_det",
-    "text_recognition": "PP-OCRv5_mobile_rec" if PADDLE_OCR_PROFILE == "mobile" else "PP-OCRv5_server_rec",
+    "text_detection": "ch_PP-OCRv4_det",
+    "text_recognition": "ch_PP-OCRv4_rec",
+    "cls": "ch_ppocr_mobile_v2.0_cls",
 }
 
 
@@ -53,22 +54,18 @@ def should_use_ocr_for_pdf(extracted_text: str, total_pages: int, non_empty_page
 
 
 def get_paddle_model_dirs() -> dict[str, Path]:
+    # 2.x 默认下载到 whl 目录下极其深层的子目录
+    base = PADDLE_MODEL_CACHE_DIR / "whl"
     return {
-        key: PADDLE_MODEL_CACHE_DIR / model_name
-        for key, model_name in PADDLE_MODEL_NAMES.items()
+        "text_detection": base / "det" / "ch" / f"{PADDLE_MODEL_NAMES['text_detection']}_infer",
+        "text_recognition": base / "rec" / "ch" / f"{PADDLE_MODEL_NAMES['text_recognition']}_infer",
+        "cls": base / "cls" / f"{PADDLE_MODEL_NAMES['cls']}_infer",
     }
 
 
 def _is_model_dir_ready(model_dir: Path) -> bool:
+    # 2.x 的模型目录检查较为复杂，通常由 PaddleOCR 自行管理下载
     if not model_dir.exists() or not model_dir.is_dir():
-        return False
-    if not (model_dir / "config.json").exists():
-        return False
-    if not (model_dir / "inference.json").exists():
-        return False
-    if not (model_dir / "inference.yml").exists():
-        return False
-    if not any(model_dir.glob("*.pdiparams")):
         return False
     return True
 
@@ -149,9 +146,9 @@ def _load_paddleocr_class():
 
     version_text = str(getattr(paddleocr, "__version__", "0"))
     version = _parse_paddleocr_version(version_text)
-    if version and version < (3, 0, 0):
+    if version and version < (2, 6, 0):
         raise RuntimeError(
-            f"当前 PaddleOCR 版本为 {version_text}，低于项目要求的 3.x。"
+            f"当前 PaddleOCR 版本为 {version_text}，低于项目要求的 2.6.x 稳定版。"
             f"请使用与 Streamlit 相同的 Python 环境重新安装依赖，并运行 {get_ocr_init_command()}。"
         )
 
@@ -175,12 +172,8 @@ def _build_paddle_model_kwargs() -> dict:
 
 @lru_cache(maxsize=1)
 def _get_paddle_ocr_engine():
-    if not is_paddle_ocr_ready():
-        raise RuntimeError(get_paddle_ocr_not_ready_message())
-
     PaddleOCR, _ = _load_paddleocr_class()
-    kwargs_v3 = _build_paddle_model_kwargs()
-    return PaddleOCR(**kwargs_v3)
+    return PaddleOCR(use_angle_cls=True, lang="ch", use_gpu=False)
 
 
 def _extract_from_v3_result_item(result_item: object) -> str:
@@ -266,42 +259,10 @@ def extract_text_with_paddle(file_bytes: bytes, suffix: str) -> str:
 
 
 def initialize_paddle_ocr() -> dict:
-    try:
-        from PIL import Image, ImageDraw
-    except Exception as exc:
-        raise RuntimeError("初始化 OCR 失败：缺少 Pillow 图像依赖。") from exc
-
     PaddleOCR, version_text = _load_paddleocr_class()
-
-    init_kwargs_v3 = {
-        "use_doc_orientation_classify": True,
-        "use_doc_unwarping": False,
-        "use_textline_orientation": False,
-        "doc_orientation_classify_model_name": PADDLE_MODEL_NAMES["doc_orientation"],
-        "text_detection_model_name": PADDLE_MODEL_NAMES["text_detection"],
-        "text_recognition_model_name": PADDLE_MODEL_NAMES["text_recognition"],
-    }
-
-    engine = None
-    first_exc: Exception | None = None
-    try:
-        engine = PaddleOCR(**init_kwargs_v3)
-    except Exception as exc:
-        first_exc = exc
-
-    if engine is None and any(path.exists() for path in get_paddle_model_dirs().values()):
-        try:
-            engine = PaddleOCR(**_build_paddle_model_kwargs())
-        except Exception as exc:
-            first_exc = exc
-
-    if engine is None:
-        detail = str(first_exc).strip() if first_exc else "未知错误"
-        raise RuntimeError(
-            f"OCR 初始化失败：当前 PaddleOCR 版本为 {version_text}，"
-            f"按 3.x PP-OCRv5 配置初始化未成功。底层错误：{detail}。"
-            f"请先使用 `{get_pip_install_command()}` 重新安装依赖，再执行 `{get_ocr_init_command()}`。"
-        ) from first_exc
+    
+    # 2.x 的初始化更简单
+    engine = PaddleOCR(use_angle_cls=True, lang="ch", use_gpu=False)
 
     temp_path: Path | None = None
     try:

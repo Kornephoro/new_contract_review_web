@@ -2,6 +2,9 @@
 	"folders": [
 		{
 			"path": "."
+		},
+		{
+			"path": "../vibe coding项目/new_fitness_dashboard2"
 		}
 	]
 }
