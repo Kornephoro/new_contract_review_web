@@ -13,6 +13,7 @@ import streamlit.components.v1 as components
 from openai import OpenAI
 
 from legal_review.llm import completion_with_tool_loop
+from legal_review.masking import MaskResult, mask_contract_text
 from legal_review.mcp_bridge import call_tool_sync, load_mcp_config
 from legal_review.ocr import (
     extract_text_with_paddle,
@@ -24,6 +25,8 @@ from legal_review.ocr import (
     is_required_python_version,
     should_use_ocr_for_pdf,
 )
+from legal_review.overview_resolver import resolve_display_overview
+from legal_review.risk_mapper import build_raw_export_risks
 from legal_review.review_html import build_risk_deck_html
 from legal_review.prompts import (
     CHAT_SYSTEM_PREFIX,
@@ -65,6 +68,7 @@ def save_settings():
         "openai_api_key", "openai_base_url", "openai_model",
         "ollama_base_url", "ollama_model",
         "review_templates", "selected_review_template_id",
+        "masking_enabled", "masking_export_masked",
     ]:
         if k in st.session_state:
             s[k] = st.session_state[k]
@@ -1069,6 +1073,16 @@ if "contract_input_mode" not in st.session_state:
     st.session_state.contract_input_mode = "上传合同文件"
 if "show_export_dialog" not in st.session_state:
     st.session_state.show_export_dialog = False
+if "masking_enabled" not in st.session_state:
+    st.session_state.masking_enabled = True
+if "masking_export_masked" not in st.session_state:
+    st.session_state.masking_export_masked = True
+if "masking_result" not in st.session_state:
+    st.session_state.masking_result = None
+if "contract_raw_text" not in st.session_state:
+    st.session_state.contract_raw_text = ""
+if "contract_review_text" not in st.session_state:
+    st.session_state.contract_review_text = ""
 
 
 def _hash_text(value: str) -> str:
@@ -1193,14 +1207,66 @@ def _toggle_review_later_risk(risk_idx: int) -> bool:
     return marked
 
 
-def _build_review_snapshot(final_text: str, contract_type: str, overview: dict, risks: list[dict], selected_template: Optional[dict]) -> dict:
+def _build_review_snapshot(
+    raw_text: str,
+    review_text: str,
+    contract_type: str,
+    review_overview: dict,
+    display_overview_raw: dict,
+    display_overview_masked: dict,
+    risks: list[dict],
+    raw_export_risks: list[dict],
+    selected_template: Optional[dict],
+    mask_result: MaskResult | None,
+) -> dict:
     return {
-        "text": final_text,
+        "text": review_text,
+        "raw_text": raw_text,
+        "review_text": review_text,
+        "display_text": review_text,
         "contract_type": contract_type,
-        "overview": overview,
+        "overview": display_overview_raw,
+        "review_overview": review_overview,
+        "display_overview_raw": display_overview_raw,
+        "display_overview_masked": display_overview_masked,
         "risks": risks,
+        "raw_export_risks": raw_export_risks,
         "selected_template_name": selected_template["name"] if selected_template else None,
+        "masking": {
+            "enabled": bool(mask_result and mask_result.enabled),
+            "sent_to_model_masked": bool(mask_result and mask_result.enabled),
+            "stats": dict((mask_result.stats if mask_result else {}) or {}),
+        },
     }
+
+
+def _is_masked_review_snapshot(snap: Optional[dict]) -> bool:
+    masking = (snap or {}).get("masking") or {}
+    return bool(masking.get("sent_to_model_masked"))
+
+
+def _get_display_overview(snap: Optional[dict], masked: bool = False) -> dict:
+    if not snap:
+        return {}
+    if masked:
+        return snap.get("display_overview_masked") or snap.get("review_overview") or snap.get("overview") or {}
+    return snap.get("display_overview_raw") or snap.get("overview") or snap.get("review_overview") or {}
+
+
+def _get_report_risks(snap: Optional[dict], masked: bool = False) -> list[dict]:
+    if not snap:
+        return []
+    if masked:
+        return snap.get("risks") or []
+    return snap.get("raw_export_risks") or snap.get("risks") or []
+
+
+def _masking_summary_text(masking: dict | None) -> str:
+    stats = (masking or {}).get("stats") or {}
+    if not stats:
+        return "未识别到明确敏感字段"
+    parts = [f"{label} {count}" for label, count in sorted(stats.items()) if count]
+    return "，".join(parts) if parts else "未识别到明确敏感字段"
 
 
 def extract_text(file, file_bytes: bytes | None = None):
@@ -1352,13 +1418,25 @@ def _render_change_review_panel(snap: dict, shell_bg: str, shell_border: str, sh
         return
 
     st.markdown(
-        f'<div style="padding:18px 20px;border-radius:20px;background:{shell_bg};border:1px solid {shell_border};box-shadow:{shell_shadow};margin-top:18px;">'
+        f'<div style="padding:18px 20px 12px 20px;border-radius:20px 20px 0 0;background:{shell_bg};border:1px solid {shell_border};'
+        f'border-bottom:none;box-shadow:{shell_shadow};margin-top:18px;">'
         f'<div style="display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:flex-end;">'
         f'<div><div style="font-family:Cormorant Garamond,Noto Serif SC,serif;font-size:1.24rem;font-weight:700;color:{shell_text};">变更确认区</div>'
         f'<div style="font-family:Outfit,Noto Sans SC,sans-serif;font-size:0.84rem;color:{shell_muted};line-height:1.72;margin-top:4px;max-width:42rem;">查看本次已采纳的修改内容，并在导出前完成最后确认。</div></div>'
         f'<div style="font-family:Outfit,Noto Sans SC,sans-serif;font-size:0.82rem;color:{shell_muted};">已采纳 {len(applied_indices)} 条</div></div></div>',
         unsafe_allow_html=True,
     )
+    action_left, action_right = st.columns([1.4, 1.0], gap="medium")
+    with action_left:
+        st.markdown(
+            f'<div style="padding:0 0 10px 4px;font-family:Outfit,Noto Sans SC,sans-serif;font-size:0.82rem;color:{shell_muted};">'
+            f'确认无误后再进入导出面板。</div>',
+            unsafe_allow_html=True,
+        )
+    with action_right:
+        if st.button("确认修改并导出", use_container_width=True, type="primary", key="export_change_review_panel"):
+            st.session_state.show_export_dialog = True
+            st.rerun()
     preview_card_bg = "var(--ml-shell-surface)"
     preview_rows = []
     for idx in applied_indices[:8]:
@@ -1373,7 +1451,11 @@ def _render_change_review_panel(snap: dict, shell_bg: str, shell_border: str, sh
             f'<div style="font-family:Outfit,Noto Sans SC,sans-serif;font-size:0.88rem;color:{shell_text};line-height:1.7;margin-top:6px;"><strong>替换后：</strong>{html.escape((state["display"] or "")[:160])}</div>'
             f'</div>'
         )
-    st.markdown("".join(preview_rows), unsafe_allow_html=True)
+    st.markdown(
+        f'<div style="padding:0 20px 18px 20px;border-radius:0 0 20px 20px;background:{shell_bg};border:1px solid {shell_border};'
+        f'border-top:none;box-shadow:{shell_shadow};">{"".join(preview_rows)}</div>',
+        unsafe_allow_html=True,
+    )
     if len(applied_indices) > 8:
         st.caption(f"还有 {len(applied_indices) - 8} 条已采纳修改将在导出区继续展示。")
 
@@ -1621,9 +1703,10 @@ def resolve_mcp_bundle():
 def _render_overview_panel(snap: dict) -> None:
     """在右上方渲染合同概览面板。"""
     ct = snap.get("contract_type") or "未识别"
-    ov = snap.get("overview") or {}
+    ov = _get_display_overview(snap, masked=False)
     risks = snap.get("risks") or []
     selected_template_name = (snap.get("selected_template_name") or "").strip()
+    masking = snap.get("masking") or {}
     high = sum(1 for r in risks if r.get("level") == "高风险")
     mid = sum(1 for r in risks if r.get("level") == "中风险")
     low = sum(1 for r in risks if r.get("level") == "低风险")
@@ -1667,6 +1750,17 @@ def _render_overview_panel(snap: dict) -> None:
             f'审校模板：{html.escape(selected_template_name)}</div>'
         )
 
+    masking_html = ""
+    if masking.get("sent_to_model_masked"):
+        masking_html = (
+            f'<div style="margin:10px 0 0 0;display:inline-flex;align-items:center;gap:8px;'
+            f'padding:6px 10px;border-radius:999px;background:rgba(184,148,95,0.10);'
+            f'border:1px solid rgba(184,148,95,0.18);font-family:Outfit,Noto Sans SC,sans-serif;'
+            f'font-size:0.78rem;color:{header_meta};line-height:1.2;">'
+            f'送 AI 文本已脱敏，右侧真实信息仅本地展示'
+            f'</div>'
+        )
+
     badge_html = []
     for label, count in [("高风险", high), ("中风险", mid), ("低风险", low)]:
         bg, fg, border = badge_styles[label]
@@ -1696,6 +1790,7 @@ def _render_overview_panel(snap: dict) -> None:
         f'<div style="font-family:Cormorant Garamond,Noto Serif SC,serif;font-size:1.38rem;font-weight:700;'
         f'color:{header_title};margin-top:4px;letter-spacing:0.01em;">{html.escape(ct)}</div>'
         f'{template_html}'
+        f'{masking_html}'
         f'</div>'
         f'<div style="max-width:280px;font-size:0.82rem;line-height:1.62;color:{header_meta};">'
         f'查看合同概览、风险分布与导出入口。'
@@ -1775,13 +1870,14 @@ def _render_overview_panel(snap: dict) -> None:
             unsafe_allow_html=True,
         )
 
-def build_export_report_html(snap: dict) -> str:
+def build_export_report_html(snap: dict, masked: bool = False) -> str:
     """生成可下载的 HTML 分析报告。"""
     import datetime as _dt
     ct = snap.get("contract_type") or "未识别"
-    ov = snap.get("overview") or {}
-    risks = snap.get("risks") or []
+    ov = _get_display_overview(snap, masked=masked)
+    risks = _get_report_risks(snap, masked=masked)
     selected_template_name = (snap.get("selected_template_name") or "").strip()
+    masking = snap.get("masking") or {}
     high = sum(1 for r in risks if r.get("level") == "高风险")
     mid  = sum(1 for r in risks if r.get("level") == "中风险")
     low  = sum(1 for r in risks if r.get("level") == "低风险")
@@ -1796,6 +1892,9 @@ def build_export_report_html(snap: dict) -> str:
         parties = "、".join(ov.get("parties") or []) or "未明确"
         if selected_template_name:
             ov_rows += f"<tr><td class='label'>审校模板</td><td>{html.escape(selected_template_name)}</td></tr>"
+        if masking.get("sent_to_model_masked"):
+            masking_label = "已脱敏展示" if masked else "送模脱敏，概览为本地恢复的真实信息"
+            ov_rows += f"<tr><td class='label'>脱敏状态</td><td>{html.escape(masking_label)}</td></tr>"
         for label, value in [
             ("参与方", parties),
             ("合同金额", ov.get("amount") or "未明确"),
@@ -1992,6 +2091,19 @@ with tab_review:
                 key="review_perspective",
                 index=0,
             )
+            st.toggle(
+                "发送给 AI 前自动脱敏",
+                key="masking_enabled",
+                on_change=save_settings,
+                help="启用后，合同会先在本地替换手机号、邮箱、身份标识、主体名称等敏感字段，再发送给模型审查。",
+            )
+            st.toggle(
+                "导出报告默认用脱敏概览",
+                key="masking_export_masked",
+                on_change=save_settings,
+                help="启用后，导出的 HTML 审查报告默认使用脱敏概览，适合共享和流转。",
+            )
+            st.caption("送 AI 的合同文本会先脱敏；右侧看板真实信息仅在本地恢复展示，不会再发给 AI。")
             st.selectbox(
                 "审校模板",
                 options=template_option_ids,
@@ -2058,7 +2170,10 @@ with tab_review:
                         _fname = f"合同审查报告_{_dt.datetime.now().strftime('%Y%m%d_%H%M')}.html"
                         st.download_button(
                             "导出分析报告 (HTML)",
-                            data=build_export_report_html(snap_preview).encode("utf-8"),
+                            data=build_export_report_html(
+                                snap_preview,
+                                masked=bool(st.session_state.get("masking_export_masked", True)),
+                            ).encode("utf-8"),
                             file_name=_fname,
                             mime="text/html",
                             use_container_width=True,
@@ -2089,7 +2204,7 @@ with tab_review:
             elif input_mode == "直接粘贴文本" and not contract_text.strip():
                 st.warning("请先粘贴需要审查的合同内容！")
             else:
-                final_text = ""
+                raw_text = ""
                 try:
                     if input_mode == "上传合同文件" and uploaded_file:
                         file_suffix = Path(uploaded_file.name).suffix.lower()
@@ -2098,20 +2213,30 @@ with tab_review:
                             parse_message = "正在解析上传文件，扫描件会先执行 OCR，请稍候..."
                         with st.spinner(parse_message):
                             file_bytes = uploaded_file.getvalue()
-                            final_text = extract_text(uploaded_file, file_bytes=file_bytes)
+                            raw_text = extract_text(uploaded_file, file_bytes=file_bytes)
                             st.session_state.original_file_bytes = file_bytes
                             st.session_state.original_file_name = uploaded_file.name
                     else:
-                        final_text = contract_text.strip()
+                        raw_text = contract_text.strip()
                         st.session_state.original_file_bytes = None
                         st.session_state.original_file_name = None
                 except Exception as e:
                     st.error(f"文件解析失败：{str(e)}")
-                    final_text = ""
+                    raw_text = ""
 
-                if final_text:
-                    st.session_state.contract_text_for_chat = final_text
-                    st.session_state.modified_contract_text = final_text
+                if raw_text:
+                    mask_result = mask_contract_text(raw_text) if st.session_state.get("masking_enabled", True) else None
+                    review_text = (
+                        mask_result.masked_text
+                        if mask_result and mask_result.enabled
+                        else raw_text
+                    )
+
+                    st.session_state.masking_result = mask_result
+                    st.session_state.contract_raw_text = raw_text
+                    st.session_state.contract_review_text = review_text
+                    st.session_state.contract_text_for_chat = review_text
+                    st.session_state.modified_contract_text = raw_text
                     st.session_state.applied_risks = set()
                     st.session_state.show_export_dialog = False
 
@@ -2135,7 +2260,7 @@ with tab_review:
 
                             messages = [
                                 {"role": "system", "content": system_prompt},
-                                {"role": "user", "content": f"请审查以下合同文本：\n\n{final_text[:4000]}"},
+                                {"role": "user", "content": f"请审查以下合同文本：\n\n{review_text[:4000]}"},
                             ]
 
                             def exec_tool(name: str, args: dict) -> str:
@@ -2159,21 +2284,42 @@ with tab_review:
                             parsed = json.loads(result_content)
                             if isinstance(parsed, dict) and "risks" in parsed:
                                 contract_type = parsed.get("contract_type") or "未识别"
-                                overview = parsed.get("overview") or {}
+                                review_overview = parsed.get("overview") or {}
                                 risks = parsed.get("risks") or []
                                 if not isinstance(risks, list):
                                     risks = []
                             elif isinstance(parsed, list):
                                 contract_type = "未分类"
-                                overview = {}
+                                review_overview = {}
                                 risks = parsed
                             else:
                                 raise ValueError("模型返回既不是对象也不是数组")
 
-                            risks = postprocess_review_risks(risks, final_text)
+                            risks = postprocess_review_risks(risks, review_text)
+                            display_overview_raw, display_overview_masked = resolve_display_overview(
+                                review_overview,
+                                raw_text,
+                                mask_result,
+                            )
+                            raw_export_risks = build_raw_export_risks(
+                                risks,
+                                raw_text,
+                                mask_result,
+                            )
                             actionable_risk_indices = get_actionable_risk_indices(risks)
                             non_actionable_count = max(0, len(risks) - len(actionable_risk_indices))
-                            snapshot = _build_review_snapshot(final_text, contract_type, overview, risks, selected_template)
+                            snapshot = _build_review_snapshot(
+                                raw_text,
+                                review_text,
+                                contract_type,
+                                review_overview,
+                                display_overview_raw,
+                                display_overview_masked,
+                                risks,
+                                raw_export_risks,
+                                selected_template,
+                                mask_result,
+                            )
                             st.session_state.review_snapshot = snapshot
                             st.session_state.risk_followup_chats = {}
                             st.session_state.focus_risk_idx = None
@@ -2221,7 +2367,7 @@ with tab_review:
             st.success(workspace_notice)
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-        action_col1, action_col2, action_col3 = st.columns([1.0, 1.0, 1.0], gap="medium")
+        action_col1, action_col2 = st.columns([1.0, 1.0], gap="medium")
         with action_col1:
             only_pending = st.toggle("只看未处理", key="workspace_only_pending")
         with action_col2:
@@ -2235,10 +2381,6 @@ with tab_review:
                     st.rerun()
                 else:
                     st.warning("当前没有可直接替换回正文的修订条款。")
-        with action_col3:
-            if st.button("打开变更确认与导出", use_container_width=True, type="primary", key="export_workspace"):
-                st.session_state.show_export_dialog = True
-                st.rerun()
 
         filter_col, status_col, sort_col = st.columns([0.9, 1.0, 1.25], gap="medium")
         with filter_col:
